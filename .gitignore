@@ -1,0 +1,18 @@
+# --- Node.js & Dependencies ---
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# --- Environment Variables (สำคัญมาก ห้ามหลุด!) ---
+.env
+.env.local
+.env.development
+.env.production
+
+# --- OS Generated Files ---
+.DS_Store
+Thumbs.db
+
+# --- Frontend Build Output (เตรียมเผื่อไว้สำหรับ React) ---
+dist/
+build/
