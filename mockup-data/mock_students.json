@@ -1,0 +1,34 @@
+[
+  {
+    "student_id": "65000001",
+    "first_name": "Natthakit",
+    "last_name": "Rodruean",
+    "building": "S21",
+    "room_number": "302",
+    "line_user_id": "Bell"
+  },
+  {
+    "student_id": "65000002",
+    "first_name": "สมหญิง",
+    "last_name": "ใจดี",
+    "building": "S20",
+    "room_number": "202",
+    "line_user_id": "Pama"
+  },
+  {
+    "student_id": "65000003",
+    "first_name": "ธนโชติ",
+    "last_name": "จาติระดุก",
+    "building": "S21",
+    "room_number": "301",
+    "line_user_id": "Pluem"
+  },
+  {
+    "student_id": "65000003",
+    "first_name": "มงคล",
+    "last_name": "อาษากิจ",
+    "building": "S22",
+    "room_number": "409",
+    "line_user_id": "Fluke"
+  }
+]
