@@ -15,8 +15,7 @@
 
 ## 📁 โครงสร้างโปรเจกต์ (Project Structure)
 โครงสร้างแบบแบ่งแยกสัดส่วนเพื่อรองรับการทำงานร่วมกันในทีม ตามแผนการแยก Branch ของ Git
-
-text
+```
 PACKAGE-Notify-MockUp/
 ├── README.md
 ├── .gitignore
@@ -54,7 +53,7 @@ PACKAGE-Notify-MockUp/
 │
 └── mock-data/              
     └── mock_students.json  # ข้อมูลนักศึกษาจำลอง (สำหรับทดสอบ)
-
+```
 ## 👥 การแบ่งงาน (Role & Responsibilities)
 เพื่อหลีกเลี่ยงข้อขัดแย้งในการรวมโค้ด (Merge Conflict) โปรเจกต์นี้แบ่งผู้รับผิดชอบหลักและ Branch การทำงานดังนี้:
 * *Staff UI Developer* (feature/staff-ui): รับผิดชอบหน้าบันทึกและจัดการพัสดุในโฟลเดอร์ frontend/staff/
