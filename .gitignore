@@ -1,18 +1,44 @@
-# --- Node.js & Dependencies ---
+# ============================================================
+#  PACKAGE-Notify-MockUp — .gitignore
+# ============================================================
+
+# ---------- Node.js ----------
 node_modules/
 npm-debug.log*
+yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
 
-# --- Environment Variables (สำคัญมาก ห้ามหลุด!) ---
+# ---------- Build Output (Vite) ----------
+dist/
+dist-ssr/
+*.local
+
+# ---------- Environment & Secrets ----------
 .env
 .env.local
-.env.development
-.env.production
+.env.development.local
+.env.test.local
+.env.production.local
 
-# --- OS Generated Files ---
+# ---------- OS ----------
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# --- Frontend Build Output (เตรียมเผื่อไว้สำหรับ React) ---
-dist/
-build/
+# ---------- Editor ----------
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ---------- Logs ----------
+logs/
+*.log
+
+# ---------- MongoDB / Backend ----------
+*.pem
