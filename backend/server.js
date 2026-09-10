@@ -1,21 +1,19 @@
+const app = require('./src/app');
 const connectDB = require('./src/config/db');
-const Student = require('./src/models/Student');
 
-const showData = async () => {
-  //สั่งเชื่อมต่อฐานข้อมูล
-  await connectDB();
+const PORT = process.env.PORT || 5000;
+
+// เริ่มต้นเชื่อมต่อฐานข้อมูลและเปิดเซิร์ฟเวอร์
+const startServer = async () => {
   try {
-    console.log('⏳ กำลังดึงข้อมูลนักศึกษา...');
-    //ดึงข้อมูลทั้งหมดจาก collection students
-    const students = await Student.find();
-    console.log('✅ ข้อมูลนักศึกษาที่พบในระบบ:');
-    console.log(students);
-    // ดึงเสร็จแล้วสั่งปิดการรันอัตโนมัติ
-    process.exit(0);
-  } catch (err) {
-    console.error('❌ เกิดข้อผิดพลาด:', err);
-    process.exit(1);
+    await connectDB();
+    app.listen(PORT, () => {
+      console.log(`^_____^ Server running on http://localhost:${PORT}`);
+      console.log(`✓ Verify API ready: http://localhost:${PORT}/api/students/verify?name=...`);
+    });
+  } catch (error) {
+    console.error('X Server startup error:', error);
   }
 };
 
-showData();
+startServer();
