@@ -1,6 +1,12 @@
 import logo from '../../../shared/rmutl-logo.png'
 
-export default function Navbar({ page, onGoDashboard, onGoPackages }) {
+export default function Navbar({
+  page,
+  onGoDashboard,
+  onGoPackages,
+  onGoUnknown,
+  unmatchedCount = 0
+}) {
   return (
     <header className="topbar">
       <button
@@ -32,6 +38,15 @@ export default function Navbar({ page, onGoDashboard, onGoPackages }) {
           onClick={onGoPackages}
         >
           จัดการพัสดุ
+        </button>
+        <button
+          type="button"
+          className={page === 'unknown' ? 'active' : ''}
+          onClick={onGoUnknown}
+          title="จัดการพัสดุที่ไม่ทราบชื่อ (FR-01, FR-04)"
+        >
+          ⚠️ พัสดุไม่ทราบชื่อ
+          {unmatchedCount > 0 && <span className="nav-badge">{unmatchedCount}</span>}
         </button>
       </nav>
 

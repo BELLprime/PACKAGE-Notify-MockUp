@@ -3,12 +3,13 @@ import Navbar from './components/Navbar'
 import Dashboard from './components/Dashboard'
 import PackageManagement from './components/PackageManagement'
 import PackageForm from './components/PackageForm'
+import UnknownPackages from './components/UnknownPackages'
 import ConfirmDeleteModal from './components/ConfirmDeleteModal'
 import Toast from './components/Toast'
 import { initialPackages, blankForm, getStudentMatchStatus } from './data/mockData'
 
 export default function App() {
-  const [page, setPage] = useState('dashboard') // 'dashboard' | 'packages' | 'package-form'
+  const [page, setPage] = useState('dashboard') // 'dashboard' | 'packages' | 'package-form' | 'unknown'
   const [filter, setFilter] = useState('all') // 'all' | 'A' | 'B' | 'unmatched'
   const [packages, setPackages] = useState(
     () => JSON.parse(localStorage.getItem('dorm-packages') || 'null') || initialPackages
@@ -25,7 +26,7 @@ export default function App() {
 
   useEffect(() => {
     if (!toast) return undefined
-    const timer = setTimeout(() => setToast(''), 2500)
+    const timer = setTimeout(() => setToast(''), 3000)
     return () => clearTimeout(timer)
   }, [toast])
 
@@ -58,6 +59,10 @@ export default function App() {
 
   const openManagePackages = () => {
     setPage('packages')
+  }
+
+  const openUnknownPackages = () => {
+    setPage('unknown')
   }
 
   const newPackage = () => {
@@ -109,12 +114,55 @@ export default function App() {
     setPage('packages')
   }
 
+  // ส่ง Broadcast ประกาศหาเจ้าของพัสดุรายชิ้น (FR-04)
+  const broadcastPackage = index => {
+    const target = packages[index]
+    setPackages(current =>
+      current.map((item, i) => (i === index ? { ...item, isBroadcasted: true } : item))
+    )
+    setToast(`📢 ส่ง Broadcast ประกาศหาเจ้าของพัสดุ ${target.tracking} ไปยังบอร์ดกลางแล้ว`)
+  }
+
+  // ส่ง Broadcast ประกาศพัสดุไม่ทราบชื่อทั้งหมด (FR-04)
+  const broadcastAllPackages = () => {
+    setPackages(current =>
+      current.map(item =>
+        !getStudentMatchStatus(item).matched ? { ...item, isBroadcasted: true } : item
+      )
+    )
+    setToast(`📢 ส่ง Broadcast ประกาศพัสดุไม่ทราบชื่อทั้งหมดไปยังบอร์ดกลางเรียบร้อยแล้ว`)
+  }
+
+  // จับคู่นักศึกษาด้วยตนเอง (Manual Match) เมื่อนักศึกษามาแสดงตัว
+  const manualMatchPackage = (index, student) => {
+    setPackages(current =>
+      current.map((item, i) => {
+        if (i !== index) return item
+        return {
+          ...item,
+          recipient: student.fullNameTh || `${student.first_name} ${student.last_name}`,
+          studentId: student.student_id,
+          room: `${student.building}-${student.room_number}`,
+          building: student.building,
+          phone: student.phone || item.phone,
+          status: 'รอรับพัสดุ',
+          note: `จับคู่กับนักศึกษา ${student.student_id} เรียบร้อยแล้ว`,
+        }
+      })
+    )
+    setToast(
+      `✅ จับคู่พัสดุกับ ${student.first_name} (${student.student_id}) สำเร็จ พัสดุถูกย้ายเข้ารายการปกติแล้ว`
+    )
+  }
+
   return (
     <>
       <Navbar
         page={page}
         onGoDashboard={dashboard}
         onGoPackages={openManagePackages}
+        onGoUnknown={openUnknownPackages}
+        unmatchedCount={unmatchedCount}
       />
 
       <main>
@@ -135,6 +183,17 @@ export default function App() {
           <PackageManagement
             packages={packages}
             onNew={newPackage}
+            onEdit={editPackage}
+            onDelete={requestDelete}
+          />
+        )}
+
+        {page === 'unknown' && (
+          <UnknownPackages
+            packages={packages}
+            onBroadcast={broadcastPackage}
+            onBroadcastAll={broadcastAllPackages}
+            onManualMatch={manualMatchPackage}
             onEdit={editPackage}
             onDelete={requestDelete}
           />
