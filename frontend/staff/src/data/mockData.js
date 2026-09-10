@@ -52,34 +52,46 @@ export function getStudentMatchStatus(pkg) {
   if (!pkg.recipient && !pkg.studentId) {
     return { matched: false, reason: 'ไม่มีข้อมูลผู้รับ' }
   }
-  const byId = mockStudents.find(s => s.student_id === pkg.studentId)
-  if (byId) {
-    const normRecipient = (pkg.recipient || '').trim().toLowerCase()
-    const matchName =
-      normRecipient.includes(byId.first_name.toLowerCase()) ||
-      (byId.fullNameTh && normRecipient.includes(byId.fullNameTh.toLowerCase())) ||
-      (byId.last_name && normRecipient.includes(byId.last_name.toLowerCase()))
-    if (matchName) {
-      return { matched: true, student: byId }
-    } else {
-      return {
-        matched: false,
-        student: byId,
-        reason: `รหัส ${pkg.studentId} ในฐานข้อมูลคือ "${byId.fullNameTh}" แต่ชื่อผู้รับที่จ่าหน้าคือ "${pkg.recipient}"`,
+  const normRecipient = (pkg.recipient || '').trim().toLowerCase()
+
+  // กรณีมีรหัสนักศึกษาระบุไว้
+  if (pkg.studentId && pkg.studentId !== '-') {
+    const byId = mockStudents.find(s => s.student_id === pkg.studentId)
+    if (byId) {
+      const matchName =
+        (byId.first_name && normRecipient.includes(byId.first_name.toLowerCase())) ||
+        (byId.fullNameTh && normRecipient.includes(byId.fullNameTh.toLowerCase())) ||
+        (byId.last_name && normRecipient.includes(byId.last_name.toLowerCase()))
+      if (matchName) {
+        return { matched: true, student: byId }
+      } else {
+        return {
+          matched: false,
+          student: byId,
+          reason: `รหัส ${pkg.studentId} ในฐานข้อมูลคือ "${byId.fullNameTh}" แต่ชื่อผู้รับที่จ่าหน้าคือ "${pkg.recipient}"`,
+        }
       }
     }
   }
-  const byName = mockStudents.find(s => {
-    const normRecipient = (pkg.recipient || '').trim().toLowerCase()
-    return (
-      normRecipient.includes(s.first_name.toLowerCase()) ||
-      (s.fullNameTh && normRecipient.includes(s.fullNameTh.toLowerCase()))
-    )
-  })
-  if (byName) {
-    return { matched: true, student: byName }
+
+  // ค้นหาจากชื่อผู้รับ (Recipient Name Match)
+  if (normRecipient) {
+    const byName = mockStudents.find(s => {
+      const fn = (s.first_name || '').toLowerCase()
+      const ln = (s.last_name || '').toLowerCase()
+      const full = (s.fullNameTh || '').toLowerCase()
+      return (
+        (fn && normRecipient.includes(fn)) ||
+        (ln && normRecipient.includes(ln)) ||
+        (full && (normRecipient.includes(full) || full.includes(normRecipient)))
+      )
+    })
+    if (byName) {
+      return { matched: true, student: byName }
+    }
   }
-  return { matched: false, reason: 'ไม่พบข้อมูลนักศึกษารหัสหรือชื่อนี้ในฐานข้อมูลหอพัก' }
+
+  return { matched: false, reason: 'ไม่พบข้อมูลนักศึกษารายชื่อนี้ในฐานข้อมูลหอพัก' }
 }
 
 export const initialPackages = [
