@@ -151,6 +151,8 @@ const verifyStudentHandler = async (req, res) => {
 };
 
 module.exports = {
+  getDashboardData: exports.getDashboardData,
+  getAllStudents: exports.getAllStudents,
   verifyStudentByName,
   verifyStudentHandler
 };
