@@ -1,21 +1,28 @@
+const express = require('express');
+const cors = require('cors');
 const connectDB = require('./src/config/db');
-const Student = require('./src/models/Student');
+const studentRoutes = require('./src/routes/studentRoutes');
 
-const showData = async () => {
-  //สั่งเชื่อมต่อฐานข้อมูล
-  await connectDB();
+const app = express();
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Connect to MongoDB (we'll log the error but not crash if it fails for now so mock data still works)
+const connectToDB = async () => {
   try {
-    console.log('⏳ กำลังดึงข้อมูลนักศึกษา...');
-    //ดึงข้อมูลทั้งหมดจาก collection students
-    const students = await Student.find();
-    console.log('✅ ข้อมูลนักศึกษาที่พบในระบบ:');
-    console.log(students);
-    // ดึงเสร็จแล้วสั่งปิดการรันอัตโนมัติ
-    process.exit(0);
+    await connectDB();
   } catch (err) {
-    console.error('❌ เกิดข้อผิดพลาด:', err);
-    process.exit(1);
+    console.warn('Could not connect to MongoDB. Running without DB.');
   }
 };
+connectToDB();
 
-showData();
+// Routes
+app.use('/api/student', studentRoutes);
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
