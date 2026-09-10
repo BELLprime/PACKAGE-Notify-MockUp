@@ -94,8 +94,25 @@ export default function App() {
 
   const savePackage = event => {
     event.preventDefault()
+    // ดึงข้อมูลนักศึกษาจากชื่อที่กรอกอัตโนมัติ
+    const match = getStudentMatchStatus(form)
+    const matchedStudent = match.matched ? match.student : null
+    const prevItem = editingIndex !== null ? packages[editingIndex] : null
+
     const item = {
       ...form,
+      studentId: matchedStudent
+        ? matchedStudent.student_id
+        : (prevItem?.studentId || '-'),
+      room: matchedStudent
+        ? matchedStudent.room_number
+        : (prevItem?.room || '-'),
+      building: matchedStudent
+        ? matchedStudent.building
+        : (prevItem?.building || 'A'),
+      phone: matchedStudent
+        ? matchedStudent.phone
+        : (prevItem?.phone || '-'),
       photoUrl,
       status: form.status || (editingIndex === null ? 'รอรับพัสดุ' : packages[editingIndex].status),
       date: editingIndex === null ? 'วันนี้' : packages[editingIndex].date,

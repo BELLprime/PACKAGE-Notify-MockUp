@@ -6,24 +6,24 @@ const testTask8Backend = async () => {
   await connectDB();
 
   console.log('\n======================================================');
-  console.log('🧪 เริ่มทดสอบ Task 8: Backend API & Unknown Packages');
+  console.log('🧪 เริ่มทดสอบ Task 8: Backend API (คลีนข้อมูลแล้ว)');
   console.log('======================================================\n');
 
   // ลบข้อมูลทดสอบเดิมที่อาจค้างอยู่
   await Package.deleteMany({ tracking: { $regex: /^TEST-PKG-/ } });
 
   // 1. จำลองการบันทึกพัสดุที่ "ตรงกับฐานข้อมูล"
-  console.log('📦 1. ทดสอบบันทึกพัสดุชื่อ "สมหญิง ใจดี"...');
+  console.log('📦 1. ทดสอบบันทึกพัสดุชื่อ "สมหญิง ใจดี" (ส่งเฉพาะ Tracking, ชื่อผู้รับ, รูป, หมายเหตุ)...');
   const match1 = await verifyStudentByName('สมหญิง ใจดี');
   const pkgMatched = await Package.create({
     tracking: 'TEST-PKG-001',
     recipient: 'สมหญิง ใจดี',
+    photo_url: '',
+    note: 'กล่องสมบูรณ์',
     student_id: match1.studentData?.student_id,
-    building: match1.studentData?.building,
-    room_number: match1.studentData?.room_number,
     status: match1.status // 'pending'
   });
-  console.log(`   -> สถานะ: [${pkgMatched.status}] (ตรงฐานข้อมูล -> รอรับพัสดุ)`);
+  console.log(`   -> สถานะ: [${pkgMatched.status}] (ผูก student_id: ${pkgMatched.student_id})`);
 
   // 2. จำลองการบันทึกพัสดุที่ "ไม่ทราบชื่อ / ชื่อไม่ตรง" (Unknown)
   console.log('\n📦 2. ทดสอบบันทึกพัสดุชื่อ "สมศรี สุขเกษม (ไม่พบนามสกุลในระบบ)"...');
@@ -31,9 +31,10 @@ const testTask8Backend = async () => {
   const pkgUnknown = await Package.create({
     tracking: 'TEST-PKG-002',
     recipient: 'สมศรี สุขเกษม',
+    photo_url: '',
+    note: 'ไม่พบชื่อในฐานข้อมูลหอพัก',
     student_id: null,
-    status: match2.status, // 'unknown'
-    note: 'ไม่พบชื่อในฐานข้อมูลหอพัก'
+    status: match2.status // 'unknown'
   });
   console.log(`   -> สถานะ: [${pkgUnknown.status}] (จัดเข้าหมวดพัสดุไม่ทราบชื่อสำเร็จ)`);
 
@@ -52,7 +53,7 @@ const testTask8Backend = async () => {
   await pkgUnknown.save();
   console.log(`   -> ผลการ Broadcast: ประกาศแล้วเมื่อ ${pkgUnknown.broadcast_at.toLocaleTimeString('th-TH')}`);
 
-  console.log('\n🎉 สรุปผล: Backend Logic & Endpoint สำหรับ Task 8 พร้อมใช้งาน 100%!');
+  console.log('\n🎉 สรุปผล: Backend Logic คลีนเรียบร้อยและพร้อมใช้งาน 100%!');
   process.exit(0);
 };
 

@@ -19,27 +19,11 @@ export default function PackageForm({
     if (file) setPhotoUrl(URL.createObjectURL(file))
   }
 
-  // ตรวจสอบกับฐานข้อมูลนักศึกษาแบบเรียลไทม์ขณะกรอก (Live verification)
+  // ตรวจสอบกับฐานข้อมูลนักศึกษาแบบเรียลไทม์ขณะกรอกชื่อผู้รับ (Live verification)
   const matchInfo = useMemo(() => {
-    if (!form.studentId && !form.recipient) return null
+    if (!form.recipient?.trim()) return null
     return getStudentMatchStatus(form)
-  }, [form.studentId, form.recipient])
-
-  // ดึงข้อมูลนักศึกษาตามรหัสที่กรอกเพื่อช่วยอำนวยความสะดวกในการกรอก
-  const matchedStudentFromDb = useMemo(() => {
-    if (!form.studentId) return null
-    return mockStudents.find(s => s.student_id === form.studentId) || null
-  }, [form.studentId])
-
-  const autoFillFromStudent = student => {
-    setForm(current => ({
-      ...current,
-      recipient: student.fullNameTh || `${student.first_name} ${student.last_name}`,
-      room: student.room_number || current.room,
-      building: student.building || current.building,
-      phone: student.phone || current.phone,
-    }))
-  }
+  }, [form.recipient, form.studentId])
 
   return (
     <section className="page active-page">
@@ -69,7 +53,7 @@ export default function PackageForm({
             <h2>{isEditing ? 'แก้ไขข้อมูลพัสดุ' : 'รายละเอียดพัสดุใหม่'}</h2>
 
             {/* แสดงสถานะการตรวจสอบกับฐานข้อมูลนักศึกษา (FR-01) */}
-            {matchInfo && (
+            {matchInfo && form.recipient?.trim() && (
               <div className={`match-banner ${matchInfo.matched ? 'success' : 'warning'}`}>
                 <span className="match-banner-icon">{matchInfo.matched ? '✓' : '⚠️'}</span>
                 <div>
@@ -79,31 +63,18 @@ export default function PackageForm({
                       : 'พัสดุที่ชื่อไม่ตรงกับข้อมูลในฐานข้อมูลนักศึกษา'}
                   </strong>
                   <div className="match-banner-desc">
-                    {matchInfo.matched
-                      ? `พบข้อมูลนักศึกษา: ${matchInfo.student.fullNameTh} (หอพักตึก ${matchInfo.student.building} ห้อง ${matchInfo.student.room_number})`
-                      : matchInfo.reason || 'ชื่อหรือรหัสผู้รับไม่ตรงกับข้อมูลในระบบหอพัก'}
+                    {matchInfo.matched ? (
+                      <>
+                        พบข้อมูล: <b>{matchInfo.student.fullNameTh}</b> (รหัส: {matchInfo.student.student_id} | หอพักตึก {matchInfo.student.building} ห้อง {matchInfo.student.room_number} | โทร: {matchInfo.student.phone})
+                        <div style={{ marginTop: '4px', color: '#135200', fontSize: '11px', fontWeight: 600 }}>
+                          ✨ ระบบจะดึงข้อมูลรหัสนักศึกษา, ห้อง, ตึก และเบอร์โทรศัพท์มาบันทึกให้อัตโนมัติ
+                        </div>
+                      </>
+                    ) : (
+                      matchInfo.reason || 'ไม่พบรายชื่อนี้ในฐานข้อมูลนักศึกษาหอพัก'
+                    )}
                   </div>
                 </div>
-              </div>
-            )}
-
-            {matchedStudentFromDb && !matchInfo?.matched && (
-              <div
-                className="match-banner info"
-                style={{ justifyContent: 'space-between', alignItems: 'center' }}
-              >
-                <div>
-                  💡 พบรหัสนักศึกษานี้ในระบบ: <b>{matchedStudentFromDb.fullNameTh}</b> (ตึก{' '}
-                  {matchedStudentFromDb.building}, ห้อง {matchedStudentFromDb.room_number})
-                </div>
-                <button
-                  type="button"
-                  className="outline"
-                  style={{ padding: '4px 10px', fontSize: '11px', whiteSpace: 'nowrap' }}
-                  onClick={() => autoFillFromStudent(matchedStudentFromDb)}
-                >
-                  นำข้อมูลมาเติม
-                </button>
               </div>
             )}
 
@@ -116,44 +87,24 @@ export default function PackageForm({
                 placeholder="เช่น PKG-20260901-001"
                 required
               />
-              <Field
-                label="รหัสนักศึกษา"
-                name="studentId"
-                form={form}
-                update={update}
-                placeholder="เช่น 65000001"
-                required
-              />
-              <Field
-                label="ชื่อผู้รับ (นักศึกษา/ผู้รับ)"
-                name="recipient"
-                form={form}
-                update={update}
-                placeholder="เช่น สมหญิง ใจดี"
-                required
-              />
-              <Field
-                label="เบอร์โทรศัพท์"
-                name="phone"
-                form={form}
-                update={update}
-                placeholder="0891234567"
-              />
-              <Field
-                label="ห้อง"
-                name="room"
-                form={form}
-                update={update}
-                placeholder="A-204"
-                required
-              />
-              <label>
-                ตึกพัก
-                <select name="building" value={form.building} onChange={update}>
-                  <option value="A">หอพักชาย ตึก A</option>
-                  <option value="B">หอพักหญิง ตึก B</option>
-                </select>
-              </label>
+              <div>
+                <Field
+                  label="ชื่อผู้รับ (นักศึกษา/ผู้รับ)"
+                  name="recipient"
+                  form={form}
+                  update={update}
+                  placeholder="เช่น สมหญิง ใจดี"
+                  list="students-list"
+                  required
+                />
+                <datalist id="students-list">
+                  {mockStudents.map(s => (
+                    <option key={s.student_id} value={s.fullNameTh}>
+                      {s.student_id} (ตึก {s.building} ห้อง {s.room_number})
+                    </option>
+                  ))}
+                </datalist>
+              </div>
 
               {isEditing && (
                 <label>

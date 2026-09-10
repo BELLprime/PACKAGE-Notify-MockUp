@@ -25,15 +25,14 @@ const getUnknownPackages = async (req, res) => {
 };
 
 /**
- * ดึงรายการพัสดุทั้งหมด (รองรับ Filter ?status=... & ?building=...)
+ * ดึงรายการพัสดุทั้งหมด (รองรับ Filter ?status=...)
  * GET /api/packages
  */
 const getAllPackages = async (req, res) => {
   try {
-    const { status, building } = req.query;
+    const { status } = req.query;
     const filter = {};
     if (status && status !== 'all') filter.status = status;
-    if (building && building !== 'all') filter.building = building;
 
     const packages = await Package.find(filter).sort({ createdAt: -1 });
     return res.status(200).json({
@@ -53,11 +52,12 @@ const getAllPackages = async (req, res) => {
 
 /**
  * บันทึกพัสดุเข้าใหม่ พร้อมตรวจสอบชื่ออัตโนมัติ (FR-01)
+ * รับเฉพาะฟิลด์ที่ Staff กรอกจากหน้าฟอร์มจริง (Tracking, ชื่อผู้รับ, หมายเหตุ, รูปถ่าย)
  * POST /api/packages
  */
 const createPackage = async (req, res) => {
   try {
-    const { tracking, recipient, photo_url, note, building, room_number, phone } = req.body;
+    const { tracking, recipient, photo_url, note } = req.body;
 
     if (!recipient) {
       return res.status(400).json({
@@ -74,14 +74,10 @@ const createPackage = async (req, res) => {
 
     let packageStatus = 'unknown';
     let matchedStudentId = null;
-    let finalBuilding = building || '';
-    let finalRoom = room_number || '';
 
     if (matchResult.isMatched) {
       packageStatus = 'pending'; // พบชื่อ -> รอรับพัสดุ
       matchedStudentId = matchResult.studentData.student_id;
-      finalBuilding = matchResult.studentData.building || finalBuilding;
-      finalRoom = matchResult.studentData.room_number || finalRoom;
     } else {
       packageStatus = 'unknown'; // ไม่พบชื่อ -> พัสดุไม่ทราบชื่อ (FR-01)
     }
@@ -90,13 +86,10 @@ const createPackage = async (req, res) => {
     const newPackage = new Package({
       tracking: finalTracking,
       recipient: recipient.trim(),
-      student_id: matchedStudentId,
-      building: finalBuilding,
-      room_number: finalRoom,
-      phone: phone || '',
       photo_url: photo_url || '',
-      status: packageStatus,
-      note: note || (packageStatus === 'unknown' ? 'ชื่อไม่ตรงกับฐานข้อมูลนักศึกษาในหอ' : '')
+      note: note || (packageStatus === 'unknown' ? 'ชื่อไม่ตรงกับฐานข้อมูลนักศึกษาในหอ' : ''),
+      student_id: matchedStudentId,
+      status: packageStatus
     });
 
     await newPackage.save();
@@ -177,8 +170,6 @@ const manualMatchPackage = async (req, res) => {
 
     // อัปเดตข้อมูลพัสดุและเปลี่ยนสถานะเป็น 'pending' (รอรับพัสดุ)
     pkg.student_id = student.student_id;
-    pkg.building = student.building || pkg.building;
-    pkg.room_number = student.room_number || pkg.room_number;
     pkg.status = 'pending';
     pkg.note = `จับคู่กับนักศึกษา ${student.first_name} ${student.last_name} (${student.student_id}) เรียบร้อยแล้ว`;
 
