@@ -3,7 +3,8 @@ const router = express.Router();
 const {
   getAllNotifications,
   getNotificationsByStudent,
-  sendPersonalNotification
+  sendPersonalNotification,
+  checkAndSendOverdueReminders
 } = require('../services/notificationService');
 const Student = require('../models/Student');
 const Package = require('../models/Package');
@@ -19,7 +20,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// ดึงประวัติการแจ้งเตือนของนักศึกษาเฉพาะราย (สำหรับ Task 12)
+// ดึงประวัติการแจ้งเตือนของนักศึกษาเฉพาะราย 
 // GET /api/notifications/student/:studentId
 router.get('/student/:studentId', async (req, res) => {
   try {
@@ -31,7 +32,6 @@ router.get('/student/:studentId', async (req, res) => {
   }
 });
 
-// ยิงทดสอบจำลองการส่งแจ้งเตือนรายบุคคล (สำหรับ Task 13 Test)
 // POST /api/notifications/test-personal
 router.post('/test-personal', async (req, res) => {
   try {
@@ -54,5 +54,22 @@ router.post('/test-personal', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
+// สั่งสแกนและส่งแจ้งเตือนซ้ำอัตโนมัติเมื่อพัสดุค้างรับเกิน 5 ชม. (Task 14 / FR-03)
+// POST /api/notifications/check-reminders หรือ GET /api/notifications/check-reminders
+const checkRemindersHandler = async (req, res) => {
+  try {
+    const thresholdHours = parseFloat(req.query.hours || req.body?.hours || 5);
+    const force = req.query.force === 'true' || req.body?.force === true;
+
+    const result = await checkAndSendOverdueReminders(thresholdHours, force);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+router.get('/check-reminders', checkRemindersHandler);
+router.post('/check-reminders', checkRemindersHandler);
 
 module.exports = router;

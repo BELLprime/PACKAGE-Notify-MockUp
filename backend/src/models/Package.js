@@ -2,25 +2,25 @@ const mongoose = require('mongoose');
 
 const PackageSchema = new mongoose.Schema(
   {
-    // 1. เลขพัสดุ
+    // เลขพัสดุ
     tracking: {
       type: String,
       required: true,
       unique: true,
       trim: true
     },
-    // 2. ชื่อผู้รับ (อ่านจากหน้ากล่อง)
+    // ชื่อผู้รับ (อ่านจากหน้ากล่อง)
     recipient: {
       type: String,
       required: true,
       trim: true
     },
-    // 3. รูปถ่ายกล่องพัสดุ
+    // รูปถ่ายกล่องพัสดุ
     photo_url: {
       type: String,
       default: ''
     },
-    // 4. หมายเหตุ (เช่น มีรอยบุบ, เก็บเงินปลายทาง)
+    // หมายเหตุ (เช่น มีรอยบุบ, เก็บเงินปลายทาง)
     note: {
       type: String,
       default: ''
@@ -30,18 +30,25 @@ const PackageSchema = new mongoose.Schema(
       type: String,
       default: null
     },
-    // สถานะ: 'pending' (รอรับพัสดุ), 'received' (รับแล้ว), 'unknown' (พัสดุไม่ทราบชื่อ)
     status: {
       type: String,
       enum: ['pending', 'received', 'unknown'],
       default: 'pending'
     },
-    // สถานะการ Broadcast ประกาศหาเจ้าของ (สำหรับพัสดุไม่ทราบชื่อ FR-04)
     is_broadcasted: {
       type: Boolean,
       default: false
     },
     broadcast_at: {
+      type: Date,
+      default: null
+    },
+    // สถานะการแจ้งเตือนซ้ำเมื่อเกิน 5 ชม.
+    reminder_sent: {
+      type: Boolean,
+      default: false
+    },
+    reminder_sent_at: {
       type: Date,
       default: null
     },
