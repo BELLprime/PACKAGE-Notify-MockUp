@@ -14,7 +14,7 @@ app.use('/api/students', studentsRoute);
 app.use('/api/student', studentDashboardRoute);
 
 app.get('/', (req, res) => {
-  res.send('Package Notify Mockup API Server is Running!');
+  res.send('📦 Package Notify Mockup API Server is Running!');
 });
 
 module.exports = app;
