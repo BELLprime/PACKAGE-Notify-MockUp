@@ -3,25 +3,25 @@ const Student = require('../models/Student');
 // Mock Data from frontend
 const mockPackages = [
   {
-    id: 'TH12345678',
-    sender: 'ร้าน ABC Shop (Shopee)',
-    arrivedAt: '2 ก.ย. 2568 14:30',
-    status: 'รอรับ',
-    image: 'https://images.unsplash.com/photo-1577705998148-6da4f3963bc8?auto=format&fit=crop&w=150&q=80'
-  },
-  {
-    id: 'TH98765432',
-    sender: 'คุณแม่ สมศรี',
-    arrivedAt: '1 ก.ย. 2568 09:15',
-    status: 'รอรับ',
-    image: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=150&q=80'
-  },
-  {
     id: 'TH55443322',
     sender: 'Lazada Mall Official',
     arrivedAt: '30 ส.ค. 2568 16:45',
     status: 'รับแล้ว',
     image: 'https://images.unsplash.com/photo-1620321023374-d1a68fbc720d?auto=format&fit=crop&w=150&q=80'
+  },
+  {
+    id: 'TH98765432',
+    sender: 'ร้าน IT Gadget Store',
+    arrivedAt: '1 ก.ย. 2568 09:15',
+    status: 'รับแล้ว',
+    image: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=150&q=80'
+  },
+  {
+    id: 'TH12345678',
+    sender: 'ร้าน ABC Shop (Shopee)',
+    arrivedAt: '2 ก.ย. 2568 14:30',
+    status: 'รอรับ',
+    image: 'https://images.unsplash.com/photo-1577705998148-6da4f3963bc8?auto=format&fit=crop&w=150&q=80'
   }
 ];
 
