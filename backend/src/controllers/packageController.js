@@ -1,6 +1,7 @@
 const Package = require('../models/Package');
 const Student = require('../models/Student');
 const { verifyStudentByName } = require('./studentController');
+const { sendPersonalNotification } = require('../services/notificationService');
 
 /**
  * ดึงรายการ "พัสดุที่ไม่ทราบชื่อ" ทั้งหมด (สำหรับ Task 8)
@@ -51,8 +52,8 @@ const getAllPackages = async (req, res) => {
 };
 
 /**
- * บันทึกพัสดุเข้าใหม่ พร้อมตรวจสอบชื่ออัตโนมัติ (FR-01)
- * รับเฉพาะฟิลด์ที่ Staff กรอกจากหน้าฟอร์มจริง (Tracking, ชื่อผู้รับ, หมายเหตุ, รูปถ่าย)
+ * บันทึกพัสดุเข้าใหม่ พร้อมตรวจสอบชื่ออัตโนมัติ (FR-01) 
+ * และส่งแจ้งเตือนส่วนตัวจำลองผ่าน LINE Bot ไปยังนักศึกษา (FR-02 / Task 13)
  * POST /api/packages
  */
 const createPackage = async (req, res) => {
@@ -94,12 +95,23 @@ const createPackage = async (req, res) => {
 
     await newPackage.save();
 
+    // 3. จำลองการส่งแจ้งเตือนรายบุคคล (Task 13 / FR-02) เมื่อจับคู่นักศึกษาสำเร็จ
+    let notificationResult = null;
+    if (matchResult.isMatched && matchResult.studentData) {
+      try {
+        notificationResult = await sendPersonalNotification(matchResult.studentData, newPackage);
+      } catch (notifyErr) {
+        console.warn('⚠️ ไม่สามารถส่งแจ้งเตือนจำลองได้:', notifyErr.message);
+      }
+    }
+
     return res.status(201).json({
       success: true,
       message: packageStatus === 'unknown' 
         ? '⚠️ บันทึกพัสดุแล้ว แต่ไม่พบชื่อในระบบ (จัดเข้าหมวดพัสดุไม่ทราบชื่อ)'
-        : '✅ บันทึกพัสดุและจับคู่นักศึกษาสำเร็จ',
+        : '✅ บันทึกพัสดุและส่งแจ้งเตือน LINE หานักศึกษาเรียบร้อยแล้ว (FR-02)',
       isMatched: matchResult.isMatched,
+      notification: notificationResult,
       data: newPackage
     });
 
@@ -147,6 +159,7 @@ const broadcastPackage = async (req, res) => {
 
 /**
  * เจ้าหน้าที่จับคู่นักศึกษาด้วยตนเอง (Manual Match) เมื่อนักศึกษามาแสดงตัว
+ * พร้อมสั่งยิงแจ้งเตือนส่วนบุคคลไปยัง LINE ทันทีที่จับคู่สำเร็จ!
  * PUT /api/packages/:id/match
  */
 const manualMatchPackage = async (req, res) => {
@@ -175,9 +188,18 @@ const manualMatchPackage = async (req, res) => {
 
     await pkg.save();
 
+    // ส่งแจ้งเตือนรายบุคคลไปยัง LINE ทันที
+    let notificationResult = null;
+    try {
+      notificationResult = await sendPersonalNotification(student, pkg);
+    } catch (notifyErr) {
+      console.warn('⚠️ ไม่สามารถส่งแจ้งเตือนจำลองได้:', notifyErr.message);
+    }
+
     return res.status(200).json({
       success: true,
-      message: `✅ จับคู่พัสดุกับนักศึกษา ${student.first_name} สำเร็จ สถานะเปลี่ยนเป็นรอรับพัสดุ`,
+      message: `✅ จับคู่พัสดุกับนักศึกษา ${student.first_name} สำเร็จ พร้อมส่งแจ้งเตือนทาง LINE`,
+      notification: notificationResult,
       data: pkg
     });
   } catch (error) {
