@@ -4,8 +4,10 @@ import { getStudentMatchStatus } from '../data/mockData'
 export default function Dashboard({
   visiblePackages,
   unmatchedCount,
+  waitingCount,
   todayReceived,
   totalReceived,
+  studentsCount,
   filter,
   setFilter,
   onNew,
@@ -31,7 +33,7 @@ export default function Dashboard({
       </div>
 
       <div className="stats">
-        <StatCard icon="◴" tone="orange" label="พัสดุรอรับวันนี้" value="12" unit="ชิ้น" />
+        <StatCard icon="◴" tone="orange" label="พัสดุรอรับวันนี้" value={waitingCount ?? 4} unit="ชิ้น" />
         <StatCard
           icon="!"
           tone="red"
@@ -51,7 +53,7 @@ export default function Dashboard({
             </>
           }
         />
-        <StatCard icon="♧" tone="gray" label="นักศึกษา/พักทั้งหมด" value="240" unit="คน" />
+        <StatCard icon="♧" tone="gray" label="นักศึกษา/พักทั้งหมด" value={studentsCount || 5} unit="คน" />
       </div>
 
       <section className="filter-card">
@@ -126,11 +128,11 @@ export default function Dashboard({
                           </span>
                         )}
                       </td>
-                      <td>{item.room}</td>
+                      <td>{matchStatus.matched ? item.room : '-'}</td>
                       <td>
-                        หอพัก{item.building === 'A' ? 'ชาย' : 'หญิง'} ตึก {item.building}
+                        {matchStatus.matched ? `หอพัก${item.building === 'A' || item.building === 'S21' || item.building === 'S22' ? 'ชาย' : 'หญิง'} ตึก ${item.building}` : '-'}
                       </td>
-                      <td>{item.phone || '-'}</td>
+                      <td>{matchStatus.matched ? (item.phone || '-') : '-'}</td>
                       <td>
                         <span
                           className={`badge ${item.status === 'รับแล้ว' ? 'done' : 'pending'}`}

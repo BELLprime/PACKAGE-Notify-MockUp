@@ -245,9 +245,9 @@ export default function PackageManagement({ packages, onNew, onEdit, onDelete })
                         )}
                       </td>
                       <td>
-                        {item.room} (ตึก {item.building})
+                        {matchStatus.matched ? `${item.room} (ตึก ${item.building})` : '-'}
                       </td>
-                      <td>{item.phone || '-'}</td>
+                      <td>{matchStatus.matched ? (item.phone || '-') : '-'}</td>
                       <td>{item.date}</td>
                       <td>
                         <span

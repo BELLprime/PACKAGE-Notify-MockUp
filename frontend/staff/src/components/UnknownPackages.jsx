@@ -30,7 +30,14 @@ export default function UnknownPackages({
   }, [packages, searchQuery])
 
   const broadcastedCount = unknownList.filter(({ item }) => item.isBroadcasted).length
-  const pendingBroadcastCount = unknownList.length - broadcastedCount
+  const pendingBroadcastCount = unknownList.filter(
+    ({ item }) =>
+      !item.isBroadcasted &&
+      item.status !== 'รับแล้ว' &&
+      item.status !== 'received' &&
+      !item.claimedBy &&
+      item.status !== 'claimed'
+  ).length
 
   const handleOpenMatchModal = (item, index) => {
     setMatchModalTarget({ item, index })
@@ -193,7 +200,15 @@ export default function UnknownPackages({
                         </small>
                       </td>
                       <td>
-                        {item.isBroadcasted ? (
+                        {item.status === 'รับแล้ว' || item.status === 'received' ? (
+                          <span className="badge done">
+                            ✅ รับพัสดุแล้ว
+                          </span>
+                        ) : item.claimedBy || item.status === 'claimed' ? (
+                          <span className="badge" style={{ background: '#e6f7ff', color: '#096dd9', border: '1px solid #91d5ff' }}>
+                            🙋 มีผู้แจ้งสิทธิ์แล้ว ({item.claimedBy})
+                          </span>
+                        ) : item.isBroadcasted ? (
                           <span className="badge verified" style={{ background: '#e6f7ff', color: '#096dd9' }}>
                             📢 ประกาศบนบอร์ดแล้ว
                           </span>
@@ -206,20 +221,46 @@ export default function UnknownPackages({
                       <td>{item.date}</td>
                       <td style={{ textAlign: 'center' }}>
                         <div className="btn-actions" style={{ justifyContent: 'center' }}>
-                          {/* ปุ่ม Broadcast (FR-04) */}
-                          <button
-                            type="button"
-                            className="btn-action"
-                            style={{
-                              background: item.isBroadcasted ? '#f5f5f5' : '#e6f7ff',
-                              color: item.isBroadcasted ? '#8c8c8c' : '#096dd9',
-                              border: '1px solid #91d5ff'
-                            }}
-                            title="ส่ง Broadcast ประกาศหาเจ้าของ"
-                            onClick={() => onBroadcast(index)}
-                          >
-                            📢 {item.isBroadcasted ? 'Broadcast ซ้ำ' : 'Broadcast'}
-                          </button>
+                          {/* ปุ่ม Broadcast (FR-04) - ป้องกันการกดซ้ำหากประกาศไปแล้ว หรือมีผู้รับ/แจ้งสิทธิ์แล้ว */}
+                          {item.status === 'รับแล้ว' || item.status === 'received' ? (
+                            <span style={{ fontSize: '12px', color: '#52c41a', fontWeight: 600, padding: '4px 8px' }}>
+                              ✓ รับแล้ว
+                            </span>
+                          ) : item.claimedBy || item.status === 'claimed' ? (
+                            <button
+                              type="button"
+                              className="btn-action"
+                              disabled
+                              style={{ background: '#f5f5f5', color: '#8c8c8c', border: '1px solid #d9d9d9', cursor: 'not-allowed' }}
+                              title="มีนักศึกษาแจ้งสิทธิ์ความเป็นเจ้าของแล้ว ไม่สามารถประกาศซ้ำได้"
+                            >
+                              🙋 แจ้งสิทธิ์แล้ว
+                            </button>
+                          ) : item.isBroadcasted ? (
+                            <button
+                              type="button"
+                              className="btn-action"
+                              disabled
+                              style={{ background: '#f5f5f5', color: '#8c8c8c', border: '1px solid #d9d9d9', cursor: 'not-allowed' }}
+                              title="พัสดุนี้ได้ทำการประกาศ Broadcast ไปแล้ว ไม่สามารถกดซ้ำได้"
+                            >
+                              📢 ประกาศแล้ว
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn-action"
+                              style={{
+                                background: '#e6f7ff',
+                                color: '#096dd9',
+                                border: '1px solid #91d5ff'
+                              }}
+                              title="ส่ง Broadcast ประกาศหาเจ้าของ"
+                              onClick={() => onBroadcast(index)}
+                            >
+                              📢 Broadcast
+                            </button>
+                          )}
 
                           {/* ปุ่มจับคู่นักศึกษา (Manual Match) */}
                           <button
