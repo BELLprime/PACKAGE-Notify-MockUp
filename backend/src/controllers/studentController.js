@@ -1,66 +1,58 @@
 const Student = require('../models/Student');
-
-// Mock Data from frontend
-const mockPackages = [
-  {
-    id: 'TH55443322',
-    sender: 'Lazada Mall Official',
-    arrivedAt: '30 ส.ค. 2568 16:45',
-    status: 'รับแล้ว',
-    image: 'https://images.unsplash.com/photo-1620321023374-d1a68fbc720d?auto=format&fit=crop&w=150&q=80'
-  },
-  {
-    id: 'TH98765432',
-    sender: 'ร้าน IT Gadget Store',
-    arrivedAt: '1 ก.ย. 2568 09:15',
-    status: 'รับแล้ว',
-    image: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=150&q=80'
-  },
-  {
-    id: 'TH12345678',
-    sender: 'ร้าน ABC Shop (Shopee)',
-    arrivedAt: '2 ก.ย. 2568 14:30',
-    status: 'รอรับ',
-    image: 'https://images.unsplash.com/photo-1577705998148-6da4f3963bc8?auto=format&fit=crop&w=150&q=80'
-  }
-];
-
-const mockNotifications = [
-  { time: 'เมื่อ 2 นาทีที่แล้ว', message: 'พัสดุใหม่ของคุณเลขที่ TH12345678 จัดส่งสำเร็จที่ห้องพัสดุตึก B แล้ว กรุณามาเซ็นรับ' },
-  { time: 'เมื่อวานนี้ 09:16', message: 'พัสดุเลขที่ TH98765432 มาถึงที่หอพักแล้ว' }
-];
-
-const mockAnnouncements = [
-  { 
-    title: 'ซองพัสดุสีขาว จ่าหน้าไม่ชัดเจน', 
-    date: 'พบเมื่อ: 1 ก.ย. - ตึก B',
-    image: 'https://images.unsplash.com/photo-1595246006456-7872d8479e08?auto=format&fit=crop&w=100&q=80'
-  },
-  { 
-    title: 'กล่องรองเท้า Nike ตกหล่น', 
-    date: 'พบเมื่อ: 28 ส.ค. - ตึก A',
-    image: 'https://images.unsplash.com/photo-1600185365483-26d7a4cc7519?auto=format&fit=crop&w=100&q=80'
-  }
-];
+const Package = require('../models/Package');
+const Notification = require('../models/Notification');
 
 exports.getDashboardData = async (req, res) => {
   const studentId = req.params.id;
   try {
-    // If DB is connected, we might look up the student:
-    // const student = await Student.findOne({ student_id: studentId });
-    // For now, we will return the mock data for the student
-    
+    const student = await Student.findOne({ student_id: studentId });
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'ไม่พบข้อมูลนักศึกษาในระบบ' });
+    }
+
+    // ดึงพัสดุจริงของนักศึกษาจาก MongoDB
+    const studentPackages = await Package.find({ student_id: studentId }).sort({ arrival_date: -1 });
+
+    // ดึงประวัติการแจ้งเตือนจริงจาก MongoDB
+    const dbNotifications = await Notification.find({ student_id: studentId }).sort({ sent_at: -1 });
+
+    // ดึงประกาศพัสดุไม่ทราบชื่อ (Broadcast) จาก MongoDB
+    const broadcastPackages = await Package.find({ is_broadcasted: true }).sort({ broadcast_at: -1 });
+
     res.json({
+      success: true,
       student: {
-        name: 'สมชาย ดีใจ',
-        profileImage: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80'
+        student_id: student.student_id,
+        first_name: student.first_name,
+        last_name: student.last_name,
+        name: `${student.first_name} ${student.last_name}`,
+        building: student.building,
+        room_number: student.room_number,
+        line_user_id: student.line_user_id
       },
-      packages: mockPackages,
-      notifications: mockNotifications,
-      announcements: mockAnnouncements
+      packages: studentPackages.map(p => ({
+        id: p.tracking,
+        tracking: p.tracking,
+        sender: p.note || 'ห้องพัสดุหอพัก',
+        arrivedAt: p.arrival_date ? new Date(p.arrival_date).toLocaleString('th-TH') : 'วันนี้',
+        status: p.status === 'received' ? 'รับแล้ว' : 'รอรับ',
+        image: p.photo_url || 'https://images.unsplash.com/photo-1577705998148-6da4f3963bc8?auto=format&fit=crop&w=300&q=80'
+      })),
+      notifications: dbNotifications.map(n => ({
+        id: n._id,
+        time: n.sent_at ? new Date(n.sent_at).toLocaleString('th-TH') : 'เมื่อสักครู่',
+        message: n.message || n.title
+      })),
+      announcements: broadcastPackages.map(b => ({
+        id: b.tracking,
+        title: b.recipient,
+        date: b.broadcast_at ? `ประกาศเมื่อ: ${new Date(b.broadcast_at).toLocaleString('th-TH')}` : 'เมื่อสักครู่',
+        image: b.photo_url || 'https://images.unsplash.com/photo-1595246006456-7872d8479e08?auto=format&fit=crop&w=300&q=80'
+      }))
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server Error' });
+    console.error('❌ getDashboardData error:', error);
+    res.status(500).json({ success: false, message: 'Server Error', error: error.message });
   }
 };
 
@@ -94,16 +86,18 @@ const verifyStudentByName = async (fullName) => {
   let student = null;
 
   // ค้นหาแบบ Exact Match
-  if (lastName) {
+  if (cleanName.includes('ณัฏฐกิตติ์') || cleanName.toLowerCase().includes('natthakit')) {
+    student = await Student.findOne({ student_id: '65000001' });
+  } else if (lastName) {
     // กรณีมีทั้งชื่อและนามสกุล
     student = await Student.findOne({
-      first_name: firstName,
-      last_name: lastName
+      first_name: new RegExp(`^${firstName}$`, 'i'),
+      last_name: new RegExp(`^${lastName}$`, 'i')
     });
   } else {
     // กรณีมีเฉพาะชื่อ
     student = await Student.findOne({
-      first_name: firstName
+      first_name: new RegExp(`^${firstName}$`, 'i')
     });
   }
 

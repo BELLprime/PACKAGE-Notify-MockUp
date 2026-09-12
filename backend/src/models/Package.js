@@ -32,8 +32,16 @@ const PackageSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'received', 'unknown'],
+      enum: ['pending', 'received', 'unknown', 'claimed'],
       default: 'pending'
+    },
+    claimed_by: {
+      type: String,
+      default: null
+    },
+    claim_proof: {
+      type: String,
+      default: null
     },
     is_broadcasted: {
       type: Boolean,
