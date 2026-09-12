@@ -2167,13 +2167,27 @@ html, body {
 }
 
 /* ============================================================
-   TOAST NOTIFICATION (LINE Style Real-time Notification Banner)
+/* ============================================================
+   TOAST NOTIFICATION STACK (LINE Style Real-time Stacked Banner)
    ============================================================ */
-.line-notification-toast {
+.line-toast-stack-container {
   position: fixed;
   top: 46px;
   right: 20px;
   z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 390px;
+  pointer-events: none;
+}
+.line-toast-stack-container .line-notification-toast {
+  position: static;
+  pointer-events: auto;
+  margin: 0;
+  width: 100%;
+}
+.line-notification-toast {
   background: rgba(30, 33, 38, 0.96);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(6, 199, 85, 0.45);
@@ -2257,7 +2271,7 @@ html, body {
   color: #ffffff;
 }
 @media (max-width: 600px) {
-  .line-notification-toast {
+  .line-toast-stack-container {
     left: 12px;
     right: 12px;
     max-width: none;

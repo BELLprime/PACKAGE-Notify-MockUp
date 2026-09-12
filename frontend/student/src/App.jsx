@@ -26,7 +26,7 @@ export default function App() {
   const [mobileOpenChatId, setMobileOpenChatId] = useState(null); // for Mobile screen opening a chat
   const [readChatIds, setReadChatIds] = useState(['dormtrack']); // marked as read when entered
   const [dormTrackUnreadCount, setDormTrackUnreadCount] = useState(0); // real-time unread notification count
-  const [toastNotification, setToastNotification] = useState(null); // toast banner for alerts
+  const [toastList, setToastList] = useState([]); // Task: Stacked toast notifications (แจ้งเตือนแบบ stack)
   const [showBanner, setShowBanner] = useState(true);
   const [viewMode, setViewMode] = useState('auto'); // 'auto' | 'mobile' | 'desktop'
   const [showMobileTextInput, setShowMobileTextInput] = useState(false); // toggle between 'เมนู ▴' and input field
@@ -35,6 +35,26 @@ export default function App() {
   const student = currentStudent;
   const packages = currentStudent.packages || [];
   const notifications = currentStudent.notifications || [];
+
+  // ระบบแจ้งเตือนแบบ Stack (Stacked Toast Notifications)
+  const pushNotification = (notif) => {
+    const newNotif = {
+      id: notif.id || `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      title: notif.title || 'ระบบติดตามพัสดุหอพัก (มทร. ล้านนา)',
+      sender: notif.sender || 'เจ้าหน้าที่หอพัก',
+      time: notif.time || 'เมื่อสักครู่',
+      message: notif.message || '',
+      chatId: notif.chatId || 'dormtrack',
+      filter: notif.filter || (notif.sender?.includes('Broadcast') || notif.sender?.includes('ประกาศ') ? 'broadcast' : 'all')
+    };
+
+    setToastList(prev => [newNotif, ...prev.slice(0, 3)]); // stack สูงสุด 4 การแจ้งเตือน ล่าสุดอยู่บน
+
+    // เคลียร์อัตโนมัติเมื่อครบ 6 วินาที
+    setTimeout(() => {
+      setToastList(prev => prev.filter(t => t.id !== newNotif.id));
+    }, 6000);
+  };
 
   // LINE-style soft chime notification sound using Web Audio API
   const playNotificationSound = () => {
@@ -70,16 +90,16 @@ export default function App() {
     setDormTrackUnreadCount(0);
     setReadChatIds(prev => prev.includes('dormtrack') ? prev : [...prev, 'dormtrack']);
     playNotificationSound();
-    setToastNotification({
-      id: studentList[index].name,
-      sender: 'สลับบัญชีผู้ใช้งาน',
+    pushNotification({
+      id: `switch-${studentList[index].student_id || studentList[index].id}-${Date.now()}`,
+      sender: '👤 สลับบัญชีผู้ใช้งาน',
       time: 'เมื่อสักครู่',
       message: `คุณกำลังดูระบบในนาม ${studentList[index].name} (${studentList[index].room})`
     });
   };
 
   // Submit Claim Ownership for Task 11 (FR-04)
-  const handleConfirmClaim = () => {
+  const handleConfirmClaim = async () => {
     if (!claimModalPackage) return;
     if (!claimEvidence.trim()) {
       alert('กรุณาระบุหลักฐานยืนยันความเป็นเจ้าของ');
@@ -87,12 +107,30 @@ export default function App() {
     }
 
     const targetPkg = claimModalPackage;
+    const pkgId = targetPkg.tracking || targetPkg.id;
+    const studentClaimant = `${currentStudent.name} (${currentStudent.student_id || currentStudent.id})`;
+
+    // ส่งคำสั่ง PUT ไปยัง Backend API / MongoDB
+    try {
+      await fetch(`http://localhost:5000/api/packages/${pkgId}/claim`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          claimed_by: studentClaimant,
+          claim_proof: claimEvidence.trim(),
+          student_id: currentStudent.student_id || currentStudent.id
+        })
+      });
+    } catch (err) {
+      console.warn('Backend claim failed:', err);
+    }
+
     setBroadcastPackages(prev => prev.map(p => {
       if (p.id === targetPkg.id || p.tracking === targetPkg.tracking) {
         return {
           ...p,
           status: 'claimed',
-          claimedBy: `${currentStudent.name} (${currentStudent.student_id || currentStudent.id})`,
+          claimedBy: studentClaimant,
           claimProof: claimEvidence.trim()
         };
       }
@@ -100,9 +138,9 @@ export default function App() {
     }));
 
     playNotificationSound();
-    setToastNotification({
-      id: targetPkg.tracking,
-      sender: 'ประกาศพัสดุไม่ทราบชื่อ',
+    pushNotification({
+      id: `claim-${targetPkg.tracking}-${Date.now()}`,
+      sender: '📢 ประกาศพัสดุไม่ทราบชื่อ',
       time: 'เมื่อสักครู่',
       message: `แจ้งสิทธิ์พัสดุ ${targetPkg.tracking} สำเร็จแล้ว เจ้าหน้าที่หอพักจะตรวจสอบหลักฐาน`
     });
@@ -111,25 +149,243 @@ export default function App() {
     setClaimEvidence('');
   };
 
-  // Auto-hide toast after 6 seconds
-  useEffect(() => {
-    if (toastNotification) {
-      const timer = setTimeout(() => setToastNotification(null), 6000);
-      return () => clearTimeout(timer);
+  // รีเซ็ตข้อมูลทั้งหมดของ Student UI กลับสู่ค่าเริ่มต้น
+  const handleResetAll = async () => {
+    if (window.confirm('คุณต้องการรีเซ็ตข้อมูลและประกาศพัสดุกลับสู่ค่าเริ่มต้นหรือไม่?')) {
+      setStudentList(studentProfiles);
+      setSelectedStudentIndex(0);
+      setBroadcastPackages(initialBroadcastPackages);
+      setDormTrackUnreadCount(0);
+      playNotificationSound();
+      pushNotification({
+        id: 'reset-' + Date.now(),
+        sender: '⚙️ ระบบส่วนกลาง',
+        time: 'เมื่อสักครู่',
+        message: '🔄 รีเซ็ตข้อมูลระบบนักศึกษากลับสู่ค่าเริ่มต้นเรียบร้อยแล้ว'
+      });
+      try {
+        await fetch('http://localhost:5000/api/packages/reset', { method: 'POST' });
+      } catch (e) {}
     }
-  }, [toastNotification]);
+  };
 
-  const handleToastClick = () => {
-    setSelectedChatId('dormtrack');
-    setMobileOpenChatId('dormtrack');
+  // Auto-sync / Real-time Poll สำหรับดึง Broadcast และพัสดุใหม่จาก Backend
+  const knownBroadcastKeysRef = useRef(new Set());
+  const knownPersonalPkgKeysRef = useRef(new Set());
+  const lastResetTimeRef = useRef(null);
+  const lastUpdateTimeRef = useRef(null);
+  const selectedStudentIndexRef = useRef(selectedStudentIndex);
+
+  useEffect(() => {
+    selectedStudentIndexRef.current = selectedStudentIndex;
+  }, [selectedStudentIndex]);
+
+  // ซิงค์ข้อมูลพัสดุจริงจาก Backend API / MongoDB เข้าสู่โปรไฟล์นักศึกษา
+  const syncPackagesFromDB = async (isInitial = false) => {
+    try {
+      const res = await fetch('http://localhost:5000/api/packages');
+      if (!res.ok) return;
+      const json = await res.json();
+      if (!json.success || !Array.isArray(json.data) || json.data.length === 0) return;
+      const dbPkgs = json.data;
+
+      // ตรวจหาพัสดุใหม่ที่เพิ่งเพิ่มเข้ามาในระบบ
+      let hasNewForCurrent = false;
+      let newForCurrentPkg = null;
+      let hasNewForOther = false;
+      let newForOtherPkg = null;
+
+      const activeStudent = studentList[selectedStudentIndexRef.current] || currentStudent;
+      const currentStId = activeStudent.student_id || activeStudent.id;
+
+      dbPkgs.forEach(p => {
+        const key = p.tracking;
+        if (!knownPersonalPkgKeysRef.current.has(key)) {
+          knownPersonalPkgKeysRef.current.add(key);
+          if (!isInitial) {
+            if (p.student_id === currentStId) {
+              hasNewForCurrent = true;
+              newForCurrentPkg = p;
+            } else if (p.student_id) {
+              hasNewForOther = true;
+              newForOtherPkg = p;
+            }
+          }
+        }
+      });
+
+      // หากมีพัสดุใหม่สำหรับนักศึกษาคนปัจจุบันที่กำลังดูหน้าจออยู่
+      if (hasNewForCurrent && newForCurrentPkg) {
+        playNotificationSound();
+        setDormTrackUnreadCount(prev => prev + 1);
+        setReadChatIds(prev => prev.filter(id => id !== 'dormtrack'));
+        pushNotification({
+          id: `new-pkg-${newForCurrentPkg.tracking}-${Date.now()}`,
+          sender: '📦 ระบบติดตามพัสดุหอพัก (LINE Official)',
+          time: 'เมื่อสักครู่',
+          message: `แจ้งเตือนพัสดุใหม่! เลขที่ [${newForCurrentPkg.tracking}] จ่าหน้า "${newForCurrentPkg.recipient}" มาถึงห้องพัสดุแล้ว กรุณาตรวจสอบและเซ็นรับ`,
+          chatId: 'dormtrack',
+          filter: 'personal'
+        });
+        scrollToBottom();
+      } else if (hasNewForOther && newForOtherPkg) {
+        // หากเป็นพัสดุของเพื่อนร่วมหอพัก
+        playNotificationSound();
+        pushNotification({
+          id: `new-pkg-${newForOtherPkg.tracking}-${Date.now()}`,
+          sender: '🏢 เจ้าหน้าที่หอพัก (บันทึกพัสดุใหม่)',
+          time: 'เมื่อสักครู่',
+          message: `มีพัสดุใหม่ [${newForOtherPkg.tracking}] ของ ${newForOtherPkg.recipient} (${newForOtherPkg.student_id}) เข้าสู่ระบบหอพัก`,
+          chatId: 'dormtrack',
+          filter: 'all'
+        });
+      }
+
+      setStudentList(prevStudents => prevStudents.map(st => {
+        const stPkgs = dbPkgs.filter(p => p.student_id === (st.student_id || st.id));
+        if (stPkgs.length === 0) return st;
+        return {
+          ...st,
+          packages: stPkgs.map(p => ({
+            id: p.tracking,
+            tracking: p.tracking,
+            sender: p.note || 'ห้องพัสดุหอพัก',
+            arrivedAt: p.arrival_date ? new Date(p.arrival_date).toLocaleString('th-TH') : 'วันนี้',
+            arrival_date: p.arrival_date,
+            createdAt: p.createdAt,
+            status: p.status === 'received' ? 'รับแล้ว' : 'รอรับ',
+            image: p.photo_url || 'https://images.unsplash.com/photo-1577705998148-6da4f3963bc8?auto=format&fit=crop&w=300&q=80'
+          }))
+        };
+      }));
+    } catch (err) {
+      // Backend offline, fallback to studentProfiles in mockData
+    }
+  };
+
+  useEffect(() => {
+    initialBroadcastPackages.forEach(p => knownBroadcastKeysRef.current.add(p.tracking || p.id));
+    studentProfiles.forEach(st => {
+      st.packages?.forEach(p => knownPersonalPkgKeysRef.current.add(p.id || p.tracking));
+    });
+    syncPackagesFromDB(true);
+
+    const pollBroadcasts = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/packages/broadcasts');
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!json.success || !Array.isArray(json.data)) return;
+
+        // ตรวจสอบว่ามีการอัปเดตข้อมูลใน MongoDB หรือไม่ (เช่น เพิ่มพัสดุใหม่ เซ็นรับ หรือเคลมพัสดุ)
+        if (json.lastUpdateTime) {
+          if (lastUpdateTimeRef.current !== null && json.lastUpdateTime > lastUpdateTimeRef.current) {
+            // ดึงข้อมูลพัสดุส่วนตัวใหม่ทันทีเมื่อมีการอัปเดตข้อมูลในระบบ
+            syncPackagesFromDB(false);
+          }
+          lastUpdateTimeRef.current = json.lastUpdateTime;
+        }
+
+        // ตรวจสอบว่า Staff เพิ่งกดปุ่ม Reset หรือไม่
+        if (json.resetTime) {
+          if (lastResetTimeRef.current !== null && json.resetTime > lastResetTimeRef.current) {
+            // เมื่อ Staff กด Reset จากฝั่งเจ้าหน้าที่ ให้ Student UI รีเซ็ตตามอัตโนมัติทันที
+            setStudentList(studentProfiles);
+            setSelectedStudentIndex(0);
+            setBroadcastPackages(initialBroadcastPackages);
+            knownBroadcastKeysRef.current = new Set(initialBroadcastPackages.map(p => p.tracking || p.id));
+            knownPersonalPkgKeysRef.current = new Set();
+            studentProfiles.forEach(st => {
+              st.packages?.forEach(p => knownPersonalPkgKeysRef.current.add(p.id || p.tracking));
+            });
+            setDormTrackUnreadCount(0);
+            syncPackagesFromDB(true);
+            playNotificationSound();
+            pushNotification({
+              id: 'staff-reset-' + Date.now(),
+              sender: '🏢 เจ้าหน้าที่หอพัก (Staff)',
+              time: 'เมื่อสักครู่',
+              message: '🔄 เจ้าหน้าที่ได้รีเซ็ตระบบ: ข้อมูลพัสดุและบอร์ดประกาศถูกปรับเป็นค่าเริ่มต้นแล้ว'
+            });
+          }
+          lastResetTimeRef.current = json.resetTime;
+        }
+
+        // อัปเดตสถานะเคลม/รับพัสดุของ Broadcast ในบอร์ดให้ตรงกับ DB
+        setBroadcastPackages(prev => {
+          return prev.map(p => {
+            const serverMatch = json.data.find(item => item.tracking === p.tracking);
+            if (serverMatch) {
+              return {
+                ...p,
+                status: serverMatch.status === 'claimed' ? 'claimed' : (serverMatch.status === 'received' ? 'matched' : p.status),
+                claimedBy: serverMatch.claimed_by || p.claimedBy,
+                claimProof: serverMatch.claim_proof || p.claimProof
+              };
+            }
+            return p;
+          });
+        });
+
+        let hasNew = false;
+        let latestItem = null;
+
+        json.data.forEach(item => {
+          const key = item.tracking || item._id;
+          if (!knownBroadcastKeysRef.current.has(key)) {
+            knownBroadcastKeysRef.current.add(key);
+            hasNew = true;
+            latestItem = item;
+          }
+        });
+
+        if (hasNew && latestItem) {
+          playNotificationSound();
+          setDormTrackUnreadCount(prev => prev + 1);
+          pushNotification({
+            id: latestItem.tracking,
+            sender: '📢 ประกาศพัสดุไม่ทราบชื่อ (ส่งจาก Staff)',
+            time: 'เมื่อสักครู่',
+            message: `พบพัสดุไม่ทราบชื่อ [${latestItem.tracking}] จ่าหน้า "${latestItem.recipient}" กรุณาตรวจสอบที่ Broadcast Board`
+          });
+
+          setBroadcastPackages(prev => {
+            const exists = prev.some(p => p.tracking === latestItem.tracking);
+            if (exists) return prev;
+            return [
+              {
+                id: latestItem.tracking,
+                tracking: latestItem.tracking,
+                carrier: 'Flash Express',
+                recipientOnBox: latestItem.recipient,
+                foundLocation: 'ห้องธุรการหอพัก',
+                broadcastAt: 'เมื่อสักครู่',
+                staffNote: latestItem.note || 'เจ้าหน้าที่ได้ส่งประกาศหาเจ้าของผ่าน Staff UI',
+                photoUrl: latestItem.photo_url || 'https://images.unsplash.com/photo-1595246006456-7872d8479e08?auto=format&fit=crop&w=400&q=80',
+                status: latestItem.status === 'claimed' ? 'claimed' : (latestItem.status === 'received' ? 'matched' : 'broadcasted'),
+                claimedBy: latestItem.claimed_by || null,
+                claimProof: latestItem.claim_proof || null
+              },
+              ...prev
+            ];
+          });
+        }
+      } catch (e) {
+        // Backend not available; keep running smoothly
+      }
+    };
+
+    const timer = setInterval(pollBroadcasts, 2000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleToastItemClick = (toast) => {
+    setSelectedChatId(toast.chatId || 'dormtrack');
+    setMobileOpenChatId(toast.chatId || 'dormtrack');
     setDormTrackUnreadCount(0);
     setReadChatIds(prev => prev.includes('dormtrack') ? prev : [...prev, 'dormtrack']);
-    if (toastNotification?.sender?.includes('Broadcast') || toastNotification?.sender?.includes('ประกาศ') || toastNotification?.sender?.includes('บอร์ด')) {
-      setChatTimelineFilter('broadcast');
-    } else {
-      setChatTimelineFilter('all');
-    }
-    setToastNotification(null);
+    setChatTimelineFilter(toast.filter || 'all');
+    setToastList(prev => prev.filter(t => t.id !== toast.id));
   };
 
   const handleSelectDesktopChat = (chatId) => {
@@ -167,7 +423,7 @@ export default function App() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [selectedChatId, mobileOpenChatId]);
+  }, [selectedChatId, mobileOpenChatId, chatTimelineFilter, selectedStudentIndex]);
 
   // Responsive signature canvas sizing
   useEffect(() => {
@@ -205,17 +461,40 @@ export default function App() {
     }
   ];
 
-  const handleSign = () => {
+  const handleSign = async () => {
     if (sigCanvas.current.isEmpty()) {
       alert("กรุณาเซ็นชื่อก่อนยืนยันรับพัสดุ");
       return;
     }
     
-    // Update ONLY the selected package status to 'รับแล้ว' for current student
+    let signatureData = '';
+    try {
+      signatureData = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png');
+    } catch (e) {
+      console.warn('Canvas export failed:', e);
+    }
+
+    const pkgId = selectedPackage.id || selectedPackage.tracking;
+
+    // ส่งคำสั่ง PUT ไปยัง Backend API / MongoDB (FR-03 & Task 12)
+    try {
+      await fetch(`http://localhost:5000/api/packages/${pkgId}/receive`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signature_data: signatureData,
+          student_id: currentStudent.student_id || currentStudent.id
+        })
+      });
+    } catch (err) {
+      console.warn('Backend update failed:', err);
+    }
+
+    // อัปเดตสถานะของพัสดุนี้เป็น 'รับแล้ว' ใน Student UI
     setStudentList(prev => {
       const nextList = [...prev];
       const curPkgs = nextList[selectedStudentIndex].packages.map(p => 
-        p.id === selectedPackage.id ? { ...p, status: 'รับแล้ว' } : p
+        (p.id === pkgId || p.tracking === pkgId) ? { ...p, status: 'รับแล้ว' } : p
       );
       nextList[selectedStudentIndex] = {
         ...nextList[selectedStudentIndex],
@@ -223,6 +502,15 @@ export default function App() {
       };
       return nextList;
     });
+
+    playNotificationSound();
+    pushNotification({
+      id: `recv-${pkgId}-${Date.now()}`,
+      sender: '📦 รับพัสดุสำเร็จ',
+      time: 'เมื่อสักครู่',
+      message: `ยืนยันการเซ็นรับพัสดุ ${pkgId} เรียบร้อยแล้ว ข้อมูลถูกบันทึกลงฐานข้อมูล`
+    });
+
     setSelectedPackage(null);
   };
 
@@ -367,6 +655,109 @@ export default function App() {
   // Current active chat on Mobile
   const currentMobileChat = allChats.find(c => c.id === mobileOpenChatId) || null;
 
+  // ฟังก์ชันแปลงข้อความวันที่และเวลา (ทั้งแบบ พ.ศ., ค.ศ., และคำกำกับ) เป็น Timestamp (ms) เพื่อจัดเรียงลำดับเวลาให้ถูกต้องแม่นยำ
+  const parseTimelineTime = (timeStr, rawDate) => {
+    if (rawDate) {
+      const d = new Date(rawDate);
+      if (!isNaN(d.getTime())) return d.getTime();
+    }
+    if (!timeStr || typeof timeStr !== 'string') return 0;
+    const s = timeStr.trim();
+    if (s.includes('เมื่อสักครู่')) return Date.now() + 1000;
+    
+    // รูปแบบ "dd/mm/yyyy hh:mm:ss" หรือ "dd/mm/yyyy, hh:mm:ss" (เช่น จาก toLocaleString('th-TH'))
+    const slashMatch = s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})[,\s]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+    if (slashMatch) {
+      let day = parseInt(slashMatch[1], 10);
+      let month = parseInt(slashMatch[2], 10) - 1;
+      let year = parseInt(slashMatch[3], 10);
+      if (year > 2400) year -= 543; // แปลงปี พ.ศ. เป็น ค.ศ.
+      let hour = parseInt(slashMatch[4], 10);
+      let min = parseInt(slashMatch[5], 10);
+      let sec = slashMatch[6] ? parseInt(slashMatch[6], 10) : 0;
+      return new Date(year, month, day, hour, min, sec).getTime();
+    }
+
+    // รูปแบบวันที่ไทย เช่น "1 ก.ย. 2569 14:30" หรือ "31 ส.ค. 2569 16:45"
+    const thaiMonths = {
+      'ม.ค.': 0, 'ก.พ.': 1, 'มี.ค.': 2, 'เม.ย.': 3, 'พ.ค.': 4, 'มิ.ย.': 5,
+      'ก.ค.': 6, 'ส.ค.': 7, 'ก.ย.': 8, 'ต.ค.': 9, 'พ.ย.': 10, 'ธ.ค.': 11
+    };
+    const thMatch = s.match(/(\d{1,2})\s+([ก-๙\.]+)\s+(\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+    if (thMatch) {
+      let day = parseInt(thMatch[1], 10);
+      let mStr = thMatch[2];
+      let month = thaiMonths[mStr] !== undefined ? thaiMonths[mStr] : 0;
+      let year = parseInt(thMatch[3], 10);
+      if (year > 2400) year -= 543;
+      let hour = thMatch[4] ? parseInt(thMatch[4], 10) : 12;
+      let min = thMatch[5] ? parseInt(thMatch[5], 10) : 0;
+      let sec = thMatch[6] ? parseInt(thMatch[6], 10) : 0;
+      return new Date(year, month, day, hour, min, sec).getTime();
+    }
+
+    if (s.includes('วันนี้')) return Date.now() - 3600000;
+    if (s.includes('เมื่อวาน')) return Date.now() - 86400000;
+    if (s.includes('2 วันก่อน')) return Date.now() - 172800000;
+
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.getTime();
+    return 0;
+  };
+
+  // ผู้ช่วยจัดรูปแบบการแสดงผลวันที่บน Date Divider
+  const formatDateDivider = (timeStr) => {
+    if (!timeStr) return 'วันนี้';
+    const slashMatch = timeStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if (slashMatch) {
+      const day = slashMatch[1];
+      const monthIndex = parseInt(slashMatch[2], 10) - 1;
+      const year = slashMatch[3];
+      const monthNames = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+      return `${day} ${monthNames[monthIndex] || 'ก.ย.'} ${year}`;
+    }
+    return timeStr.split(' ').slice(0, 3).join(' ');
+  };
+
+  // ผู้ช่วยจัดรูปแบบเวลาใน Bubble แชท (เช่น 14:30 น.)
+  const formatBubbleTime = (timeStr) => {
+    if (!timeStr) return '12:00 น.';
+    if (timeStr.includes('น.')) return timeStr.split(' ').slice(-2).join(' ');
+    const m = timeStr.match(/(\d{1,2}:\d{2})(?::\d{2})?/);
+    if (m) return `${m[1]} น.`;
+    return timeStr;
+  };
+
+  // จัดเรียงตามลำดับเวลาห้องแชทมาตรฐาน (ข้อความเก่าสุดอยู่ด้านบน -> ข้อความล่าสุดอยู่ล่างสุดเสมอ)
+  const personalTimelineItems = packages.map((pkg, idx) => ({
+    type: 'personal',
+    id: pkg.id || `personal-${idx}`,
+    timeWeight: parseTimelineTime(pkg.arrivedAt, pkg.arrival_date || pkg.createdAt),
+    pkg: pkg
+  })).sort((a, b) => a.timeWeight - b.timeWeight);
+
+  const broadcastTimelineItems = broadcastPackages.map((bpkg, idx) => ({
+    type: 'broadcast',
+    id: bpkg.id || bpkg.tracking || `broadcast-${idx}`,
+    timeWeight: parseTimelineTime(bpkg.broadcastAt, bpkg.broadcast_at || bpkg.createdAt),
+    bpkg: bpkg
+  })).sort((a, b) => a.timeWeight - b.timeWeight);
+
+  let timelineItems = [];
+  if (chatTimelineFilter === 'personal') {
+    timelineItems = personalTimelineItems;
+  } else if (chatTimelineFilter === 'broadcast') {
+    timelineItems = broadcastTimelineItems;
+  } else {
+    // 'all': รวมแชทพัสดุทั้งหมด ทั้งพัสดุส่วนตัวและประกาศพัสดุไม่ทราบชื่อ เรียงตามลำดับเวลาในห้องแชท (เก่าสุดอยู่บน -> ใหม่สุดอยู่ล่าง)
+    timelineItems = [...personalTimelineItems, ...broadcastTimelineItems].sort((a, b) => a.timeWeight - b.timeWeight);
+  }
+
+  // เลื่อนหน้าจอแชทลงสู่ข้อความล่าสุด (ด้านล่างสุด) อัตโนมัติเสมอเมื่อมีพัสดุใหม่เข้าสู่ไทม์ไลน์
+  useEffect(() => {
+    scrollToBottom();
+  }, [timelineItems.length]);
+
   return (
     <div className={`app-root mode-${viewMode}`}>
       {/* ========================================================= */}
@@ -431,33 +822,36 @@ export default function App() {
         </div>
       </div>
 
-      {/* Real-time Toast Notification */}
-      {toastNotification && (
-        <div 
-          className="line-notification-toast"
-          onClick={handleToastClick}
-          title="คลิกเพื่อเปิดดูห้องแชทพัสดุ"
-        >
-          <div className="toast-icon">📦</div>
-          <div className="toast-content">
-            <div className="toast-title-row">
-              <strong>ระบบติดตามพัสดุหอพัก (มทร. ล้านนา)</strong>
-              <span className="toast-time">เมื่อสักครู่</span>
-            </div>
-            <p className="toast-body">
-              แจ้งเตือนพัสดุใหม่ <b>{toastNotification.id}</b> จาก {toastNotification.sender} ถึงหอพักแล้ว กรุณาเซ็นรับ
-            </p>
-            <span className="toast-hint">👉 คลิกเพื่อเปิดแชทและเซ็นรับ</span>
-          </div>
-          <button 
-            className="toast-close" 
-            onClick={(e) => { e.stopPropagation(); setToastNotification(null); }}
-            title="ปิด"
+      {/* Real-time Stacked Toast Notifications (แจ้งเตือนแบบ stack ตาม Task) */}
+      <div className="line-toast-stack-container">
+        {toastList.map((toast) => (
+          <div 
+            key={toast.id}
+            className="line-notification-toast"
+            onClick={() => handleToastItemClick(toast)}
+            title="คลิกเพื่อเปิดดูห้องแชทพัสดุ"
           >
-            ×
-          </button>
-        </div>
-      )}
+            <div className="toast-icon">
+              {toast.sender.includes('📢') || toast.sender.includes('ประกาศ') ? '📢' : toast.sender.includes('👤') ? '👤' : toast.sender.includes('⚙️') ? '⚙️' : '📦'}
+            </div>
+            <div className="toast-content">
+              <div className="toast-title-row">
+                <strong>{toast.title}</strong>
+                <span className="toast-time">{toast.time}</span>
+              </div>
+              <p className="toast-body">{toast.message}</p>
+              <span className="toast-hint">👉 คลิกเพื่อเปิดแชทและดูรายละเอียด</span>
+            </div>
+            <button 
+              className="toast-close" 
+              onClick={(e) => { e.stopPropagation(); setToastList(prev => prev.filter(t => t.id !== toast.id)); }}
+              title="ปิด"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
 
       {/* ========================================================= */}
       {/* LINE DESKTOP (PC VERSION) - เหมือนรูปตัวอย่าง media_1789030719313 */}
@@ -665,131 +1059,135 @@ export default function App() {
                   broadcastCount={broadcastPackages.length}
                 />
 
-                {/* Render Personal Packages (เมื่อเลือก 'ทั้งหมด' หรือ 'พัสดุของฉัน') */}
-                {(chatTimelineFilter === 'all' || chatTimelineFilter === 'personal') && packages.map((pkg, idx) => (
-                  <div key={pkg.id || idx} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div className="pc-time-divider">
-                      {pkg.arrivedAt.split(' ').slice(0, 3).join(' ')}
-                    </div>
-
-                    {/* Official Slip Notification Bubble (Aligned with Mobile) */}
-                    <div className="pc-msg-bubble-wrap">
-                      <div className="pc-sender-avatar-official">
-                        <span className="kbank-brand-icon">📦</span>
-                        <span className="kbank-sub">DORM</span>
-                      </div>
-                      
-                      <div className="pc-bubble-column">
-                        {/* CRISP WHITE CARD BUBBLE (Identical to Mobile) */}
-                        <div className="line-white-card-bubble pc-white-card-override">
-                          <div className="card-top-header">
-                            <div className="card-brand-title">
-                              <span className="card-pkg-icon">📬</span>
-                              <h4>แจ้งเตือนพัสดุ</h4>
-                            </div>
-                            <span className={`line-card-status-badge ${pkg.status === 'รอรับ' ? 'status-waiting' : 'status-done'}`}>
-                              {pkg.status === 'รอรับ' ? 'รอเซ็นรับพัสดุ' : 'รับพัสดุแล้ว'}
-                            </span>
-                          </div>
-
-                          <div className="card-inner-divider"></div>
-
-                          {/* รูปพัสดุ */}
-                          {pkg.image && (
-                            <div className="card-pkg-image-box">
-                              <img src={pkg.image} alt="พัสดุ" />
-                            </div>
-                          )}
-
-                          <div className="card-details-table">
-                            <div className="card-detail-line">
-                              <span className="label">ประเภท</span>
-                              <span className="val">พัสดุลงทะเบียน / กล่องพัสดุ</span>
-                            </div>
-                            <div className="card-detail-line">
-                              <span className="label">เลขพัสดุ</span>
-                              <span className="val tracking-code">{pkg.id}</span>
-                            </div>
-                            <div className="card-detail-line">
-                              <span className="label">จากผู้ส่ง</span>
-                              <span className="val">{pkg.sender}</span>
-                            </div>
-                            <div className="card-detail-line">
-                              <span className="label">ผู้รับ</span>
-                              <span className="val">{student?.name || 'สมชาย ดีใจ'} (ห้อง 302 ตึก S21)</span>
-                            </div>
-                            <div className="card-detail-line">
-                              <span className="label">จุดรับพัสดุ</span>
-                              <span className="val">ห้องพัสดุตึก B</span>
-                            </div>
-                            <div className="card-detail-line">
-                              <span className="label">เวลาที่มาถึง</span>
-                              <span className="val">{pkg.arrivedAt}</span>
-                            </div>
-                          </div>
-
-                          {/* ACTION BUTTON (Identical to Mobile: "ปุ่มเซ็นรับพัสดุ") */}
-                          <div className="card-action-container">
-                            {pkg.status === 'รอรับ' ? (
-                              <button 
-                                className="line-official-green-btn"
-                                onClick={() => setSelectedPackage(pkg)}
-                              >
-                                ปุ่มเซ็นรับพัสดุ
-                              </button>
-                            ) : (
-                              <div className="line-official-signed-state">
-                                <span className="check-mark">✓</span> เซ็นรับพัสดุเรียบร้อยแล้ว
-                              </div>
-                            )}
-                          </div>
+                {/* Render Unified Timeline Items (ทั้งหมด / พัสดุของฉัน / ประกาศหาเจ้าของ) */}
+                {timelineItems.map((item) => {
+                  if (item.type === 'personal') {
+                    const pkg = item.pkg;
+                    return (
+                      <div key={pkg.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div className="pc-time-divider">
+                          {formatDateDivider(pkg.arrivedAt)}
                         </div>
 
-                        <span className="bubble-timestamp">
-                          {pkg.arrivedAt.includes('น.') ? pkg.arrivedAt.split(' ').slice(-2).join(' ') : '18:16 น.'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Messages when signed: Both User Confirmation & Official Bot Reply (Identical to Mobile) */}
-                    {pkg.status === 'รับแล้ว' && (
-                      <>
-                        <div className="pc-user-reply-wrap">
-                          <span className="user-reply-time">
-                            {pkg.arrivedAt.includes('น.') ? pkg.arrivedAt.split(' ').slice(-2).join(' ') : 'เมื่อสักครู่'}
-                          </span>
-                          <div className="pc-user-green-bubble">
-                            ยืนยันการรับพัสดุ {pkg.id} เรียบร้อยแล้วครับ ✅
-                          </div>
-                        </div>
-
-                        <div className="pc-msg-bubble-wrap" style={{ marginTop: '2px' }}>
+                        {/* Official Slip Notification Bubble */}
+                        <div className="pc-msg-bubble-wrap">
                           <div className="pc-sender-avatar-official">
                             <span className="kbank-brand-icon">📦</span>
                             <span className="kbank-sub">DORM</span>
                           </div>
+                          
                           <div className="pc-bubble-column">
-                            <div className="line-text-dark-bubble" style={{ maxWidth: '320px' }}>
-                              นักศึกษาได้เซ็นรับพัสดุ <b>{pkg.id}</b> เรียบร้อยแล้ว ขอบคุณที่มาติดต่อรับพัสดุครับ 📦✨
+                            {/* CRISP WHITE CARD BUBBLE */}
+                            <div className="line-white-card-bubble pc-white-card-override">
+                              <div className="card-top-header">
+                                <div className="card-brand-title">
+                                  <span className="card-pkg-icon">📬</span>
+                                  <h4>แจ้งเตือนพัสดุ</h4>
+                                </div>
+                                <span className={`line-card-status-badge ${pkg.status === 'รอรับ' ? 'status-waiting' : 'status-done'}`}>
+                                  {pkg.status === 'รอรับ' ? 'รอเซ็นรับพัสดุ' : 'รับพัสดุแล้ว'}
+                                </span>
+                              </div>
+
+                              <div className="card-inner-divider"></div>
+
+                              {/* รูปพัสดุ */}
+                              {pkg.image && (
+                                <div className="card-pkg-image-box">
+                                  <img src={pkg.image} alt="พัสดุ" />
+                                </div>
+                              )}
+
+                              <div className="card-details-table">
+                                <div className="card-detail-line">
+                                  <span className="label">ประเภท</span>
+                                  <span className="val">พัสดุลงทะเบียน / กล่องพัสดุ</span>
+                                </div>
+                                <div className="card-detail-line">
+                                  <span className="label">เลขพัสดุ</span>
+                                  <span className="val tracking-code">{pkg.id}</span>
+                                </div>
+                                <div className="card-detail-line">
+                                  <span className="label">จากผู้ส่ง</span>
+                                  <span className="val">{pkg.sender}</span>
+                                </div>
+                                <div className="card-detail-line">
+                                  <span className="label">ผู้รับ</span>
+                                  <span className="val">{student?.name} ({student?.room || 'หอพักนักศึกษา'})</span>
+                                </div>
+                                <div className="card-detail-line">
+                                  <span className="label">จุดรับพัสดุ</span>
+                                  <span className="val">ห้องพัสดุตึก B</span>
+                                </div>
+                                <div className="card-detail-line">
+                                  <span className="label">เวลาที่มาถึง</span>
+                                  <span className="val">{pkg.arrivedAt}</span>
+                                </div>
+                              </div>
+
+                              {/* ACTION BUTTON */}
+                              <div className="card-action-container">
+                                {pkg.status === 'รอรับ' ? (
+                                  <button 
+                                    className="line-official-green-btn"
+                                    onClick={() => setSelectedPackage(pkg)}
+                                  >
+                                    ปุ่มเซ็นรับพัสดุ
+                                  </button>
+                                ) : (
+                                  <div className="line-official-signed-state">
+                                    <span className="check-mark">✓</span> เซ็นรับพัสดุเรียบร้อยแล้ว
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            <span className="bubble-timestamp">เมื่อสักครู่</span>
+
+                            <span className="bubble-timestamp">
+                              {formatBubbleTime(pkg.arrivedAt)}
+                            </span>
                           </div>
                         </div>
-                      </>
-                    )}
-                  </div>
-                ))}
 
-                {/* Render Broadcast Unknown Packages (เมื่อเลือก 'ทั้งหมด' หรือ 'ประกาศ Broadcast' - Task 11 / FR-04) */}
-                {(chatTimelineFilter === 'all' || chatTimelineFilter === 'broadcast') && broadcastPackages.map((bpkg) => (
-                  <BroadcastChatCard 
-                    key={bpkg.id || bpkg.tracking}
-                    bpkg={bpkg}
-                    currentStudent={currentStudent}
-                    onClaim={(pkg) => setClaimModalPackage(pkg)}
-                    isMobile={false}
-                  />
-                ))}
+                        {/* Messages when signed */}
+                        {pkg.status === 'รับแล้ว' && (
+                          <>
+                            <div className="pc-user-reply-wrap">
+                              <span className="user-reply-time">
+                                {formatBubbleTime(pkg.arrivedAt)}
+                              </span>
+                              <div className="pc-user-green-bubble">
+                                ยืนยันการรับพัสดุ {pkg.id} เรียบร้อยแล้วครับ ✅
+                              </div>
+                            </div>
+
+                            <div className="pc-msg-bubble-wrap" style={{ marginTop: '2px' }}>
+                              <div className="pc-sender-avatar-official">
+                                <span className="kbank-brand-icon">📦</span>
+                                <span className="kbank-sub">DORM</span>
+                              </div>
+                              <div className="pc-bubble-column">
+                                <div className="line-text-dark-bubble" style={{ maxWidth: '320px' }}>
+                                  นักศึกษาได้เซ็นรับพัสดุ <b>{pkg.id}</b> เรียบร้อยแล้ว ขอบคุณที่มาติดต่อรับพัสดุครับ 📦✨
+                                </div>
+                                <span className="bubble-timestamp">เมื่อสักครู่</span>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <BroadcastChatCard 
+                        key={item.bpkg.id || item.bpkg.tracking}
+                        bpkg={item.bpkg}
+                        currentStudent={currentStudent}
+                        onClaim={(pkg) => setClaimModalPackage(pkg)}
+                        isMobile={false}
+                      />
+                    );
+                  }
+                })}
 
                 <div ref={chatEndRef} />
               </>
@@ -920,134 +1318,138 @@ export default function App() {
                     broadcastCount={broadcastPackages.length}
                   />
 
-                  {/* Render Personal Packages */}
-                  {(chatTimelineFilter === 'all' || chatTimelineFilter === 'personal') && packages.map((pkg, idx) => (
-                    <Fragment key={pkg.id || idx}>
-                      <div className="line-date-divider-clean">
-                        <span>{pkg.arrivedAt.split(' ').slice(0, 3).join(' ')}</span>
-                      </div>
-
-                      <div className="line-msg-row-official">
-                        <div className="line-official-avatar-col">
-                          <div className="line-official-avatar-bubble">
-                            <span className="kbank-brand-icon">📦</span>
-                            <span className="kbank-sub">DORM</span>
-                          </div>
-                        </div>
-                        
-                        <div className="line-msg-content-official">
-                          {/* CRISP WHITE CARD BUBBLE (Image 2) */}
-                          <div className="line-white-card-bubble">
-                            <div className="card-top-header">
-                              <div className="card-brand-title">
-                                <span className="card-pkg-icon">📬</span>
-                                <h4>แจ้งเตือนพัสดุ</h4>
-                              </div>
-                              <span className={`line-card-status-badge ${pkg.status === 'รอรับ' ? 'status-waiting' : 'status-done'}`}>
-                                {pkg.status === 'รอรับ' ? 'รอเซ็นรับพัสดุ' : 'รับพัสดุแล้ว'}
-                              </span>
-                            </div>
-
-                            <div className="card-inner-divider"></div>
-
-                            {/* รูปพัสดุ */}
-                            {pkg.image && (
-                              <div className="card-pkg-image-box">
-                                <img src={pkg.image} alt="พัสดุ" />
-                              </div>
-                            )}
-
-                            <div className="card-details-table">
-                              <div className="card-detail-line">
-                                <span className="label">ประเภท</span>
-                                <span className="val">พัสดุลงทะเบียน / กล่องพัสดุ</span>
-                              </div>
-                              <div className="card-detail-line">
-                                <span className="label">เลขพัสดุ</span>
-                                <span className="val tracking-code">{pkg.id}</span>
-                              </div>
-                              <div className="card-detail-line">
-                                <span className="label">จากผู้ส่ง</span>
-                                <span className="val">{pkg.sender}</span>
-                              </div>
-                              <div className="card-detail-line">
-                                <span className="label">ผู้รับ</span>
-                                <span className="val">{student?.name || 'สมชาย ดีใจ'} (ห้อง 302 ตึก S21)</span>
-                              </div>
-                              <div className="card-detail-line">
-                                <span className="label">จุดรับพัสดุ</span>
-                                <span className="val">ห้องพัสดุตึก B</span>
-                              </div>
-                              <div className="card-detail-line">
-                                <span className="label">เวลาที่มาถึง</span>
-                                <span className="val">{pkg.arrivedAt}</span>
-                              </div>
-                            </div>
-
-                            {/* GREEN ACTION BUTTON (Matching Image 2: "ปุ่มเซ็นรับพัสดุ") */}
-                            <div className="card-action-container">
-                              {pkg.status === 'รอรับ' ? (
-                                <button 
-                                  className="line-official-green-btn"
-                                  onClick={() => setSelectedPackage(pkg)}
-                                >
-                                  ปุ่มเซ็นรับพัสดุ
-                                </button>
-                              ) : (
-                                <div className="line-official-signed-state">
-                                  <span className="check-mark">✓</span> เซ็นรับพัสดุเรียบร้อยแล้ว
-                                </div>
-                              )}
-                            </div>
+                  {/* Render Unified Timeline Items (ทั้งหมด / พัสดุของฉัน / ประกาศหาเจ้าของ) */}
+                  {timelineItems.map((item) => {
+                    if (item.type === 'personal') {
+                      const pkg = item.pkg;
+                      return (
+                        <Fragment key={pkg.id}>
+                          <div className="line-date-divider-clean">
+                            <span>{formatDateDivider(pkg.arrivedAt)}</span>
                           </div>
 
-                          <span className="line-msg-time-clean">
-                            {pkg.arrivedAt.includes('น.') ? pkg.arrivedAt.split(' ').slice(-2).join(' ') : '18:16 น.'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Messages when signed: Both User Confirmation & Official Bot Reply */}
-                      {pkg.status === 'รับแล้ว' && (
-                        <>
-                          {/* 1. ข้อความยืนยันของนักศึกษา */}
-                          <div className="line-normal-msg-row my-msg">
-                            <span className="line-normal-time">เมื่อสักครู่</span>
-                            <div className="line-normal-bubble" style={{ background: '#06c755', color: '#ffffff' }}>
-                              ยืนยันการรับพัสดุ {pkg.id} เรียบร้อยแล้วครับ ✅
-                            </div>
-                          </div>
-
-                          {/* 2. ข้อความตอบกลับจากระบบหอพัก */}
-                          <div className="line-msg-row-official" style={{ marginTop: '4px' }}>
+                          <div className="line-msg-row-official">
                             <div className="line-official-avatar-col">
                               <div className="line-official-avatar-bubble">
                                 <span className="kbank-brand-icon">📦</span>
                                 <span className="kbank-sub">DORM</span>
                               </div>
                             </div>
+                            
                             <div className="line-msg-content-official">
-                              <div className="line-text-dark-bubble">
-                                นักศึกษาได้เซ็นรับพัสดุ <b>{pkg.id}</b> เรียบร้อยแล้ว ขอบคุณที่มาติดต่อรับพัสดุครับ 📦✨
+                              {/* CRISP WHITE CARD BUBBLE (Image 2) */}
+                              <div className="line-white-card-bubble">
+                                <div className="card-top-header">
+                                  <div className="card-brand-title">
+                                    <span className="card-pkg-icon">📬</span>
+                                    <h4>แจ้งเตือนพัสดุ</h4>
+                                  </div>
+                                  <span className={`line-card-status-badge ${pkg.status === 'รอรับ' ? 'status-waiting' : 'status-done'}`}>
+                                    {pkg.status === 'รอรับ' ? 'รอเซ็นรับพัสดุ' : 'รับพัสดุแล้ว'}
+                                  </span>
+                                </div>
+
+                                <div className="card-inner-divider"></div>
+
+                                {/* รูปพัสดุ */}
+                                {pkg.image && (
+                                  <div className="card-pkg-image-box">
+                                    <img src={pkg.image} alt="พัสดุ" />
+                                  </div>
+                                )}
+
+                                <div className="card-details-table">
+                                  <div className="card-detail-line">
+                                    <span className="label">ประเภท</span>
+                                    <span className="val">พัสดุลงทะเบียน / กล่องพัสดุ</span>
+                                  </div>
+                                  <div className="card-detail-line">
+                                    <span className="label">เลขพัสดุ</span>
+                                    <span className="val tracking-code">{pkg.id}</span>
+                                  </div>
+                                  <div className="card-detail-line">
+                                    <span className="label">จากผู้ส่ง</span>
+                                    <span className="val">{pkg.sender}</span>
+                                  </div>
+                                  <div className="card-detail-line">
+                                    <span className="label">ผู้รับ</span>
+                                    <span className="val">{student?.name} ({student?.room || 'หอพักนักศึกษา'})</span>
+                                  </div>
+                                  <div className="card-detail-line">
+                                    <span className="label">จุดรับพัสดุ</span>
+                                    <span className="val">ห้องพัสดุตึก B</span>
+                                  </div>
+                                  <div className="card-detail-line">
+                                    <span className="label">เวลาที่มาถึง</span>
+                                    <span className="val">{pkg.arrivedAt}</span>
+                                  </div>
+                                </div>
+
+                                {/* GREEN ACTION BUTTON (Matching Image 2: "ปุ่มเซ็นรับพัสดุ") */}
+                                <div className="card-action-container">
+                                  {pkg.status === 'รอรับ' ? (
+                                    <button 
+                                      className="line-official-green-btn"
+                                      onClick={() => setSelectedPackage(pkg)}
+                                    >
+                                      ปุ่มเซ็นรับพัสดุ
+                                    </button>
+                                  ) : (
+                                    <div className="line-official-signed-state">
+                                      <span className="check-mark">✓</span> เซ็นรับพัสดุเรียบร้อยแล้ว
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <span className="line-msg-time-clean">เมื่อสักครู่</span>
+
+                              <span className="line-msg-time-clean">
+                                {formatBubbleTime(pkg.arrivedAt)}
+                              </span>
                             </div>
                           </div>
-                        </>
-                      )}
-                    </Fragment>
-                  ))}
 
-                  {/* Render Broadcast Unknown Packages (Task 11 / FR-04) */}
-                  {(chatTimelineFilter === 'all' || chatTimelineFilter === 'broadcast') && broadcastPackages.map((bpkg) => (
-                    <BroadcastChatCard 
-                      key={bpkg.id || bpkg.tracking}
-                      bpkg={bpkg}
-                      currentStudent={currentStudent}
-                      onClaim={(pkg) => setClaimModalPackage(pkg)}
-                      isMobile={true}
-                    />
-                  ))}
+                          {/* Messages when signed: Both User Confirmation & Official Bot Reply */}
+                          {pkg.status === 'รับแล้ว' && (
+                            <>
+                              {/* 1. ข้อความยืนยันของนักศึกษา */}
+                              <div className="line-normal-msg-row my-msg">
+                                <span className="line-normal-time">เมื่อสักครู่</span>
+                                <div className="line-normal-bubble" style={{ background: '#06c755', color: '#ffffff' }}>
+                                  ยืนยันการรับพัสดุ {pkg.id} เรียบร้อยแล้วครับ ✅
+                                </div>
+                              </div>
+
+                              {/* 2. ข้อความตอบกลับจากระบบหอพัก */}
+                              <div className="line-msg-row-official" style={{ marginTop: '4px' }}>
+                                <div className="line-official-avatar-col">
+                                  <div className="line-official-avatar-bubble">
+                                    <span className="kbank-brand-icon">📦</span>
+                                    <span className="kbank-sub">DORM</span>
+                                  </div>
+                                </div>
+                                <div className="line-msg-content-official">
+                                  <div className="line-text-dark-bubble">
+                                    นักศึกษาได้เซ็นรับพัสดุ <b>{pkg.id}</b> เรียบร้อยแล้ว ขอบคุณที่มาติดต่อรับพัสดุครับ 📦✨
+                                  </div>
+                                  <span className="line-msg-time-clean">เมื่อสักครู่</span>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </Fragment>
+                      );
+                    } else {
+                      return (
+                        <BroadcastChatCard 
+                          key={item.bpkg.id || item.bpkg.tracking}
+                          bpkg={item.bpkg}
+                          currentStudent={currentStudent}
+                          onClaim={(pkg) => setClaimModalPackage(pkg)}
+                          isMobile={true}
+                        />
+                      );
+                    }
+                  })}
 
                   <div ref={mobileChatEndRef} />
                 </>

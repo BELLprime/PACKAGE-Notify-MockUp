@@ -41,6 +41,14 @@ export function ChatTimelineFilterBar({
   );
 }
 
+const formatTimeLabel = (timeStr) => {
+  if (!timeStr) return 'เมื่อสักครู่';
+  if (timeStr.includes('น.')) return timeStr.split(' ').slice(-2).join(' ');
+  const m = timeStr.match(/(\d{1,2}:\d{2})(?::\d{2})?/);
+  if (m) return `${m[1]} น.`;
+  return timeStr;
+};
+
 /**
  * BroadcastChatCard: การ์ดข้อความประกาศพัสดุไม่ทราบชื่อในห้องแชท (สไตล์ LINE Rich Message)
  */
@@ -164,22 +172,57 @@ export function BroadcastChatCard({ bpkg, currentStudent, onClaim, isMobile }) {
           </div>
 
           <span className={isMobile ? "line-msg-time-clean" : "bubble-timestamp"}>
-            {bpkg.broadcastAt?.includes('น.') ? bpkg.broadcastAt.split(' ').slice(-2).join(' ') : 'เมื่อสักครู่'}
+            {formatTimeLabel(bpkg.broadcastAt)}
           </span>
         </div>
       </div>
 
-      {/* Messages when claimed by current student */}
-      {isMyClaim && (
+      {/* Messages when claimed by a student (visible to both claimant and other students) */}
+      {bpkg.status === 'claimed' && (
         <>
-          <div className={isMobile ? "line-normal-msg-row my-msg" : "pc-user-reply-wrap"}>
-            <span className={isMobile ? "line-normal-time" : "user-reply-time"}>เมื่อสักครู่</span>
-            <div className={isMobile ? "line-normal-bubble" : "pc-user-green-bubble"} style={{ background: '#ea580c', color: '#ffffff' }}>
-              🙋 ผมขอแจ้งเป็นเจ้าของพัสดุ {bpkg.tracking} ({bpkg.recipientOnBox}) ครับ<br/>
-              <small style={{ opacity: 0.9 }}>หลักฐาน: {bpkg.claimProof || 'แนบรายละเอียดแล้ว'}</small>
+          {isMyClaim ? (
+            /* ข้อความฝั่งผู้ส่ง (นักศึกษาเจ้าของสิทธิ์) */
+            <div className={isMobile ? "line-normal-msg-row my-msg" : "pc-user-reply-wrap"}>
+              <span className={isMobile ? "line-normal-time" : "user-reply-time"}>เมื่อสักครู่</span>
+              <div className={isMobile ? "line-normal-bubble" : "pc-user-green-bubble"} style={{ background: '#ea580c', color: '#ffffff' }}>
+                🙋 ผมขอแจ้งเป็นเจ้าของพัสดุ {bpkg.tracking} ({bpkg.recipientOnBox}) ครับ<br/>
+                <small style={{ opacity: 0.9 }}>หลักฐาน: {bpkg.claimProof || 'แนบรายละเอียดแล้ว'}</small>
+              </div>
             </div>
-          </div>
+          ) : (
+            /* ข้อความฝั่งผู้รับ (นักศึกษาคนอื่นๆ ในหอพักเห็นว่ามีคนแจ้งสิทธิ์) */
+            isMobile ? (
+              <div className="line-msg-row-other" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', margin: '4px 0' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#ffedd5', color: '#c2410c', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '13px', flexShrink: 0 }}>
+                  🙋
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '75%' }}>
+                  <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{bpkg.claimedBy}</span>
+                  <div className="line-normal-bubble" style={{ background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa' }}>
+                    🙋 ขอแจ้งเป็นเจ้าของพัสดุ <b>{bpkg.tracking}</b> ({bpkg.recipientOnBox}) ครับ<br/>
+                    <small style={{ color: '#7c2d12' }}>หลักฐาน: {bpkg.claimProof || 'แนบรายละเอียดแล้ว'}</small>
+                  </div>
+                  <span className="line-msg-time-clean">เมื่อสักครู่</span>
+                </div>
+              </div>
+            ) : (
+              <div className="pc-msg-bubble-wrap" style={{ marginTop: '4px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#ffedd5', color: '#c2410c', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '14px', flexShrink: 0 }}>
+                  🙋
+                </div>
+                <div className="pc-bubble-column">
+                  <span style={{ fontSize: '11.5px', color: '#64748b', fontWeight: 600, marginBottom: '2px' }}>{bpkg.claimedBy}</span>
+                  <div className="line-text-dark-bubble" style={{ maxWidth: '340px', background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa' }}>
+                    🙋 ขอแจ้งเป็นเจ้าของพัสดุ <b>{bpkg.tracking}</b> ({bpkg.recipientOnBox}) ครับ<br/>
+                    <small style={{ color: '#7c2d12' }}>หลักฐาน: {bpkg.claimProof || 'แนบรายละเอียดแล้ว'}</small>
+                  </div>
+                  <span className="bubble-timestamp">เมื่อสักครู่</span>
+                </div>
+              </div>
+            )
+          )}
 
+          {/* ข้อความตอบรับอัตโนมัติจากระบบหอพัก */}
           <div className={isMobile ? "line-msg-row-official" : "pc-msg-bubble-wrap"} style={{ marginTop: '4px' }}>
             {isMobile ? (
               <div className="line-official-avatar-col">
@@ -196,12 +239,40 @@ export function BroadcastChatCard({ bpkg, currentStudent, onClaim, isMobile }) {
             )}
             <div className={isMobile ? "line-msg-content-official" : "pc-bubble-column"}>
               <div className="line-text-dark-bubble" style={{ maxWidth: '320px' }}>
-                เจ้าหน้าที่หอพักได้รับแจ้งสิทธิ์พัสดุ <b>{bpkg.tracking}</b> ของคุณเรียบร้อยแล้ว กำลังตรวจสอบหลักฐาน หากถูกต้องจะแจ้งให้มารับทันทีครับ 📋✨
+                {isMyClaim 
+                  ? <>เจ้าหน้าที่หอพักได้รับแจ้งสิทธิ์พัสดุ <b>{bpkg.tracking}</b> ของคุณเรียบร้อยแล้ว กำลังตรวจสอบหลักฐาน หากถูกต้องจะแจ้งให้มารับทันทีครับ 📋✨</>
+                  : <>เจ้าหน้าที่หอพักได้รับแจ้งสิทธิ์พัสดุ <b>{bpkg.tracking}</b> จาก <b>{bpkg.claimedBy}</b> แล้ว กำลังตรวจสอบหลักฐานความถูกต้อง 📋✨</>
+                }
               </div>
               <span className={isMobile ? "line-msg-time-clean" : "bubble-timestamp"}>เมื่อสักครู่</span>
             </div>
           </div>
         </>
+      )}
+
+      {/* Messages when matched and delivered */}
+      {bpkg.status === 'matched' && (
+        <div className={isMobile ? "line-msg-row-official" : "pc-msg-bubble-wrap"} style={{ marginTop: '4px' }}>
+          {isMobile ? (
+            <div className="line-official-avatar-col">
+              <div className="line-official-avatar-bubble">
+                <span className="kbank-brand-icon">📦</span>
+                <span className="kbank-sub">DORM</span>
+              </div>
+            </div>
+          ) : (
+            <div className="pc-sender-avatar-official">
+              <span className="kbank-brand-icon">📦</span>
+              <span className="kbank-sub">DORM</span>
+            </div>
+          )}
+          <div className={isMobile ? "line-msg-content-official" : "pc-bubble-column"}>
+            <div className="line-text-dark-bubble" style={{ maxWidth: '320px', borderLeft: '3px solid #16a34a' }}>
+              เจ้าหน้าที่ได้ตรวจสอบหลักฐานและส่งมอบพัสดุ <b>{bpkg.tracking}</b> ให้กับ <b>{bpkg.claimedBy || 'นักศึกษา'}</b> เรียบร้อยแล้วครับ 🎉📦
+            </div>
+            <span className={isMobile ? "line-msg-time-clean" : "bubble-timestamp"}>ส่งมอบสำเร็จ</span>
+          </div>
+        </div>
       )}
     </div>
   );
