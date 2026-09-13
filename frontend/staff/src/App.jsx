@@ -1,69 +1,434 @@
-import { useEffect, useMemo, useState } from 'react'
-import logo from '../assets/rmutl-logo.png'
-
-const initialPackages = [
-  { tracking: 'PKG-20260901-001', recipient: 'สมชาย ใจดี', room: 'A-204', building: 'A', status: 'รอรับพัสดุ', date: '1 ก.ย. 2569' },
-  { tracking: 'PKG-20260901-002', recipient: 'มาริ ศรีดี', room: 'B-105', building: 'B', status: 'รอรับพัสดุ', date: '1 ก.ย. 2569' },
-  { tracking: 'PKG-20260831-014', recipient: 'ปกรณ์ มั่นคง', room: 'A-402', building: 'A', status: 'รับแล้ว', date: '31 ส.ค. 2569' },
-  { tracking: 'PKG-20260831-009', recipient: 'วินัย รัตนา', room: 'A-204', building: 'A', status: 'รับแล้ว', date: '31 ส.ค. 2569' },
-  { tracking: 'PKG-20260825-003', recipient: 'สัญชัย เข็ม', room: 'A-312', building: 'A', status: 'รอรับพัสดุ', date: '25 ส.ค. 2569' },
-]
-const blankForm = { tracking: '', studentId: '', recipient: '', phone: '', room: '', building: 'A', note: '' }
+import { useEffect, useMemo, useState, useRef } from 'react'
+import Navbar from './components/Navbar'
+import Dashboard from './components/Dashboard'
+import PackageManagement from './components/PackageManagement'
+import PackageForm from './components/PackageForm'
+import UnknownPackages from './components/UnknownPackages'
+import ConfirmDeleteModal from './components/ConfirmDeleteModal'
+import Toast from './components/Toast'
+import { initialPackages, blankForm, getStudentMatchStatus, mockStudents } from './data/mockData'
 
 export default function App() {
-  const [page, setPage] = useState('dashboard')
-  const [filter, setFilter] = useState('A')
-  const [packages, setPackages] = useState(() => JSON.parse(localStorage.getItem('dorm-packages') || 'null') || initialPackages)
+  const [page, setPage] = useState('dashboard') // 'dashboard' | 'packages' | 'package-form' | 'unknown'
+  const [filter, setFilter] = useState('all') // 'all' | 'A' | 'B' | 'unmatched'
+  const [packages, setPackages] = useState(
+    () => JSON.parse(localStorage.getItem('dorm-packages') || 'null') || initialPackages
+  )
   const [form, setForm] = useState(blankForm)
   const [editingIndex, setEditingIndex] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [photoUrl, setPhotoUrl] = useState('')
   const [toast, setToast] = useState('')
 
-  useEffect(() => localStorage.setItem('dorm-packages', JSON.stringify(packages)), [packages])
-  useEffect(() => { if (!toast) return undefined; const timer = setTimeout(() => setToast(''), 2400); return () => clearTimeout(timer) }, [toast])
+  const lastUpdateRef = useRef(0)
+  const lastResetRef = useRef(0)
 
-  const visiblePackages = useMemo(() => packages.map((item, index) => ({ item, index })).filter(({ item }) => filter === 'all' ? item.status === 'รอรับพัสดุ' : item.building === filter), [packages, filter])
-  const pending = packages.filter(item => item.status === 'รอรับพัสดุ').length
-  const received = packages.filter(item => item.status === 'รับแล้ว').length
+  // Real-time synchronization กับ Backend API / MongoDB
+  useEffect(() => {
+    const syncFromBackend = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/packages')
+        if (!res.ok) return
+        const json = await res.json()
+        if (!json.success || !Array.isArray(json.data)) return
 
-  const dashboard = (nextFilter = 'A') => { setFilter(nextFilter); setPage('dashboard') }
-  const newPackage = () => { setEditingIndex(null); setForm(blankForm); setPhotoUrl(''); setPage('packages') }
-  const editPackage = (item, index) => { setEditingIndex(index); setForm({ ...blankForm, ...item }); setPhotoUrl(''); setPage('packages'); window.scrollTo(0, 0) }
-  const savePackage = event => {
-    event.preventDefault()
-    const item = { ...form, status: editingIndex === null ? 'รอรับพัสดุ' : packages[editingIndex].status, date: editingIndex === null ? 'วันนี้' : packages[editingIndex].date }
-    setPackages(current => editingIndex === null ? [item, ...current] : current.map((currentItem, index) => index === editingIndex ? item : currentItem))
-    setToast(editingIndex === null ? 'บันทึกพัสดุเรียบร้อยแล้ว' : 'อัปเดตข้อมูลพัสดุเรียบร้อยแล้ว')
-    setEditingIndex(null); setForm(blankForm); setPhotoUrl(''); dashboard()
+        const serverUpdateTime = json.lastUpdateTime || 0
+        const serverResetTime = json.resetTime || 0
+
+        // หากมีการกดปุ่มรีเซ็ตระบบ
+        if (lastResetRef.current && serverResetTime > lastResetRef.current) {
+          lastResetRef.current = serverResetTime
+          lastUpdateRef.current = serverUpdateTime
+          localStorage.removeItem('dorm-packages')
+          setPackages(initialPackages)
+          return
+        }
+
+        if (serverUpdateTime > lastUpdateRef.current) {
+          lastUpdateRef.current = serverUpdateTime
+          if (serverResetTime) lastResetRef.current = serverResetTime
+
+          const mapped = json.data.map(p => {
+            const rawStatus = p.status
+            const displayStatus = rawStatus === 'received' ? 'รับแล้ว' : 'รอรับพัสดุ'
+            const match = getStudentMatchStatus({ recipient: p.recipient, studentId: p.student_id })
+            const matchedStudent = match.matched ? match.student : null
+
+            return {
+              tracking: p.tracking,
+              recipient: p.recipient,
+              studentId: matchedStudent ? matchedStudent.student_id : (p.student_id || '-'),
+              phone: matchedStudent ? matchedStudent.phone : '-',
+              room: matchedStudent ? `${matchedStudent.building}-${matchedStudent.room_number}` : '-',
+              building: matchedStudent ? matchedStudent.building : '-',
+              status: displayStatus,
+              isBroadcasted: Boolean(p.is_broadcasted),
+              claimedBy: p.claimed_by || null,
+              signatureData: p.signature_data || null,
+              photoUrl: p.photo_url || '',
+              date: p.arrival_date ? new Date(p.arrival_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : 'วันนี้',
+              note: p.note || ''
+            }
+          })
+
+          setPackages(mapped)
+        }
+      } catch (e) {
+        // Backend offline; ใช้งานข้อมูลใน LocalStorage ต่อเนื่อง
+      }
+    }
+
+    syncFromBackend()
+    const timer = setInterval(syncFromBackend, 2000)
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem('dorm-packages', JSON.stringify(packages))
+  }, [packages])
+
+  useEffect(() => {
+    if (!toast) return undefined
+    const timer = setTimeout(() => setToast(''), 3000)
+    return () => clearTimeout(timer)
+  }, [toast])
+
+  const visiblePackages = useMemo(() => {
+    return packages
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => {
+        if (filter === 'all') return true
+        if (filter === 'unmatched') return !getStudentMatchStatus(item).matched
+        return item.building === filter
+      })
+  }, [packages, filter])
+
+  const unmatchedCount = useMemo(() => {
+    return packages.filter(item => !getStudentMatchStatus(item).matched).length
+  }, [packages])
+
+  // คำนวณสถิติแดชบอร์ดตามข้อมูลจริงในระบบ
+  const waitingCount = useMemo(() => {
+    return packages.filter(
+      item => item.status === 'รอรับพัสดุ' || item.status === 'รอรับ' || item.status === 'pending'
+    ).length
+  }, [packages])
+
+  const studentsCount = mockStudents.length
+
+  const totalReceived = useMemo(() => {
+    return packages.filter(item => item.status === 'รับแล้ว' || item.status === 'received').length
+  }, [packages])
+
+  const todayReceived = useMemo(() => {
+    return packages.filter(
+      item =>
+        (item.status === 'รับแล้ว' || item.status === 'received') &&
+        (item.date === 'วันนี้' || item.receivedDate === 'วันนี้' || item.pickup_date)
+    ).length
+  }, [packages])
+
+  const dashboard = (nextFilter = 'all') => {
+    setFilter(nextFilter)
+    setPage('dashboard')
   }
 
-  return <>
-    <header className="topbar">
-      <button className="brand brand-button" onClick={() => dashboard()} aria-label="หน้าหลัก"><span className="brand-icon"><img src={logo} alt="ตราสัญลักษณ์มหาวิทยาลัยเทคโนโลยีราชมงคลล้านนา" /></span><span><b>ระบบติดตามพัสดุหอพัก</b><small>มหาวิทยาลัยเทคโนโลยีราชมงคลล้านนา</small></span></button>
-      <nav><button className={page === 'dashboard' && filter !== 'all' ? 'active' : ''} onClick={() => dashboard()}>หน้าหลัก</button><button className={page === 'packages' ? 'active' : ''} onClick={() => setPage('packages')}>จัดการพัสดุ</button><button className={page === 'dashboard' && filter === 'all' ? 'active' : ''} onClick={() => dashboard('all')}>พัสดุตกค้าง</button></nav>
-      <button className="profile" type="button"><span className="avatar">ธ</span><span><b>ธรรมชาติ ดีใจ</b><small>เจ้าหน้าที่หอพักชาย A</small></span></button>
-    </header>
-    <main>{page === 'dashboard' ? <Dashboard visiblePackages={visiblePackages} pending={pending} received={received} filter={filter} setFilter={setFilter} onNew={newPackage} onEdit={editPackage} /> : <PackageForm form={form} setForm={setForm} photoUrl={photoUrl} setPhotoUrl={setPhotoUrl} isEditing={editingIndex !== null} onSave={savePackage} onCancel={() => dashboard()} />}</main>
-    <div className={`toast ${toast ? 'show' : ''}`}>{toast}</div>
-  </>
+  const openManagePackages = () => {
+    setPage('packages')
+  }
+
+  const openUnknownPackages = () => {
+    setPage('unknown')
+  }
+
+  const newPackage = () => {
+    setEditingIndex(null)
+    setForm(blankForm)
+    setPhotoUrl('')
+    setPage('package-form')
+  }
+
+  const editPackage = (item, index) => {
+    setEditingIndex(index)
+    setForm({ ...blankForm, ...item, status: item.status || 'รอรับพัสดุ' })
+    setPhotoUrl(item.photoUrl || '')
+    setPage('package-form')
+    window.scrollTo(0, 0)
+  }
+
+  const requestDelete = (item, index) => {
+    setDeleteTarget({ item, index })
+  }
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return
+    const { item, index } = deleteTarget
+    setPackages(current => current.filter((_, i) => i !== index))
+    setToast(`ลบพัสดุ ${item.tracking} สำเร็จแล้ว`)
+    setDeleteTarget(null)
+  }
+
+  const savePackage = async event => {
+    event.preventDefault()
+    // ดึงข้อมูลนักศึกษาจากชื่อที่กรอกอัตโนมัติ
+    const match = getStudentMatchStatus(form)
+    const matchedStudent = match.matched ? match.student : null
+    const prevItem = editingIndex !== null ? packages[editingIndex] : null
+
+    const item = {
+      ...form,
+      studentId: matchedStudent
+        ? matchedStudent.student_id
+        : (prevItem?.studentId || form.studentId || '-'),
+      room: matchedStudent
+        ? matchedStudent.room_number
+        : (prevItem?.room || '-'),
+      building: matchedStudent
+        ? matchedStudent.building
+        : (prevItem?.building || 'A'),
+      phone: matchedStudent
+        ? matchedStudent.phone
+        : (prevItem?.phone || '-'),
+      photoUrl,
+      status: form.status || (editingIndex === null ? 'รอรับพัสดุ' : packages[editingIndex].status),
+      date: editingIndex === null ? 'วันนี้' : packages[editingIndex].date,
+    }
+    setPackages(current =>
+      editingIndex === null
+        ? [item, ...current]
+        : current.map((currentItem, index) => (index === editingIndex ? item : currentItem))
+    )
+    setToast(
+      editingIndex === null ? 'บันทึกพัสดุใหม่เรียบร้อยแล้ว' : 'อัปเดตข้อมูลพัสดุเรียบร้อยแล้ว'
+    )
+
+    // บันทึกและซิงค์ไปยัง Backend API (Port 5000) ทันที เพื่อส่งข้อมูลลง MongoDB และแจ้งเตือนไปยัง Student UI!
+    try {
+      if (editingIndex === null) {
+        await fetch('http://localhost:5000/api/packages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tracking: item.tracking,
+            recipient: item.recipient,
+            photo_url: photoUrl,
+            note: item.note,
+            student_id: item.studentId !== '-' ? item.studentId : null
+          })
+        })
+      }
+    } catch (err) {
+      console.warn('Backend save package failed:', err.message)
+    }
+
+    setEditingIndex(null)
+    setForm(blankForm)
+    setPhotoUrl('')
+    setPage('packages')
+  }
+
+  // รีเซ็ตข้อมูลพัสดุกลับสู่ค่าเริ่มต้น
+  const handleResetData = async () => {
+    if (window.confirm('คุณต้องการรีเซ็ตข้อมูลพัสดุและประกาศกลับสู่ค่าเริ่มต้นหรือไม่?')) {
+      localStorage.removeItem('dorm-packages')
+      setPackages(initialPackages)
+      setToast('🔄 รีเซ็ตข้อมูลพัสดุกลับสู่ค่าเริ่มต้นเรียบร้อยแล้ว')
+      try {
+        await fetch('http://localhost:5000/api/packages/reset', { method: 'POST' })
+      } catch (err) {}
+    }
+  }
+
+  // ส่ง Broadcast ประกาศหาเจ้าของพัสดุรายชิ้น (FR-04)
+  const broadcastPackage = async index => {
+    const target = packages[index]
+    if (!target) return
+    if (
+      target.status === 'รับแล้ว' ||
+      target.status === 'received' ||
+      target.claimedBy ||
+      target.isBroadcasted
+    ) {
+      setToast(`⚠️ ไม่สามารถ Broadcast พัสดุ ${target.tracking} ซ้ำได้`)
+      return
+    }
+
+    setPackages(current =>
+      current.map((item, i) => (i === index ? { ...item, isBroadcasted: true } : item))
+    )
+    setToast(`📢 ส่ง Broadcast ประกาศหาเจ้าของพัสดุ ${target.tracking} ไปยังบอร์ดกลางแล้ว`)
+
+    // ซิงค์กับ Backend API เพื่อให้ Student UI เด้งแจ้งเตือนแบบ Real-time!
+    try {
+      await fetch('http://localhost:5000/api/packages/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tracking: target.tracking,
+          recipient: target.recipient,
+          photoUrl: target.photoUrl,
+          note: target.note,
+          carrier: target.carrier || 'Flash Express',
+          foundLocation: `ห้องพัสดุตึก ${target.building || 'A'}`
+        })
+      })
+    } catch (err) {
+      console.warn('Backend offline or not running:', err.message)
+    }
+  }
+
+  // ส่ง Broadcast ประกาศพัสดุไม่ทราบชื่อทั้งหมด (FR-04)
+  const broadcastAllPackages = async () => {
+    const unMatchedToBroadcast = packages.filter(
+      item =>
+        !getStudentMatchStatus(item).matched &&
+        !item.isBroadcasted &&
+        item.status !== 'รับแล้ว' &&
+        item.status !== 'received' &&
+        !item.claimedBy &&
+        item.status !== 'claimed'
+    )
+
+    if (unMatchedToBroadcast.length === 0) {
+      setToast('⚠️ ไม่มีพัสดุใหม่ที่ต้อง Broadcast')
+      return
+    }
+
+    setPackages(current =>
+      current.map(item =>
+        !getStudentMatchStatus(item).matched &&
+        !item.isBroadcasted &&
+        item.status !== 'รับแล้ว' &&
+        item.status !== 'received' &&
+        !item.claimedBy
+          ? { ...item, isBroadcasted: true }
+          : item
+      )
+    )
+    setToast(`📢 ส่ง Broadcast ประกาศพัสดุไม่ทราบชื่อ ${unMatchedToBroadcast.length} ชิ้นไปยังบอร์ดกลางเรียบร้อยแล้ว`)
+
+    // ซิงค์ทุกชิ้นไปยัง Backend
+    for (const target of unMatchedToBroadcast) {
+      try {
+        await fetch('http://localhost:5000/api/packages/broadcast', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tracking: target.tracking,
+            recipient: target.recipient,
+            photoUrl: target.photoUrl,
+            note: target.note,
+            carrier: target.carrier || 'Flash Express',
+            foundLocation: `ห้องพัสดุตึก ${target.building || 'A'}`
+          })
+        })
+      } catch (err) {}
+    }
+  }
+
+  // จับคู่นักศึกษาด้วยตนเอง (Manual Match) เมื่อนักศึกษามาแสดงตัว
+  const manualMatchPackage = async (index, student) => {
+    const target = packages[index]
+    setPackages(current =>
+      current.map((item, i) => {
+        if (i !== index) return item
+        return {
+          ...item,
+          recipient: student.fullNameTh || `${student.first_name} ${student.last_name}`,
+          studentId: student.student_id,
+          room: `${student.building}-${student.room_number}`,
+          building: student.building,
+          phone: student.phone || item.phone,
+          status: 'รอรับพัสดุ',
+          note: `จับคู่กับนักศึกษา ${student.student_id} เรียบร้อยแล้ว`,
+        }
+      })
+    )
+    setToast(
+      `✅ จับคู่พัสดุกับ ${student.first_name} (${student.student_id}) สำเร็จ พัสดุถูกย้ายเข้ารายการปกติแล้ว`
+    )
+
+    if (target) {
+      try {
+        await fetch(`http://localhost:5000/api/packages/${target.tracking}/match`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ student_id: student.student_id })
+        })
+      } catch (err) {
+        console.warn('Backend match sync failed:', err.message)
+      }
+    }
+  }
+
+  return (
+    <>
+      <Navbar
+        page={page}
+        onGoDashboard={dashboard}
+        onGoPackages={openManagePackages}
+        onGoUnknown={openUnknownPackages}
+        onReset={handleResetData}
+        unmatchedCount={unmatchedCount}
+      />
+
+      <main>
+        {page === 'dashboard' && (
+          <Dashboard
+            visiblePackages={visiblePackages}
+            unmatchedCount={unmatchedCount}
+            waitingCount={waitingCount}
+            todayReceived={todayReceived}
+            totalReceived={totalReceived}
+            studentsCount={studentsCount}
+            filter={filter}
+            setFilter={setFilter}
+            onNew={newPackage}
+            onEdit={editPackage}
+          />
+        )}
+
+        {page === 'packages' && (
+          <PackageManagement
+            packages={packages}
+            onNew={newPackage}
+            onEdit={editPackage}
+            onDelete={requestDelete}
+          />
+        )}
+
+        {page === 'unknown' && (
+          <UnknownPackages
+            packages={packages}
+            onBroadcast={broadcastPackage}
+            onBroadcastAll={broadcastAllPackages}
+            onManualMatch={manualMatchPackage}
+            onEdit={editPackage}
+            onDelete={requestDelete}
+          />
+        )}
+
+        {page === 'package-form' && (
+          <PackageForm
+            form={form}
+            setForm={setForm}
+            photoUrl={photoUrl}
+            setPhotoUrl={setPhotoUrl}
+            isEditing={editingIndex !== null}
+            onSave={savePackage}
+            onCancel={openManagePackages}
+            onDashboard={() => dashboard('all')}
+          />
+        )}
+      </main>
+
+      <ConfirmDeleteModal
+        target={deleteTarget}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      <Toast message={toast} />
+    </>
+  )
 }
-
-function Dashboard({ visiblePackages, pending, received, filter, setFilter, onNew, onEdit }) {
-  const filters = [['A', 'หอพักชาย ตึก A'], ['B', 'หอพักหญิง ตึก B'], ['all', 'เฉพาะพัสดุตกค้าง']]
-  return <section className="page active-page">
-    <div className="page-heading"><div><h1>แดชบอร์ดเจ้าหน้าที่หอพัก</h1><p>ภาพรวมข้อมูลพัสดุ ตรวจสอบและจัดการได้อย่างสะดวก</p></div><button className="primary" onClick={onNew}>＋ เพิ่มพัสดุใหม่</button></div>
-    <div className="stats"><Stat icon="◴" tone="orange" label="พัสดุรอรับวันนี้" value="12" unit="ชิ้น" /><Stat icon="!" tone="orange" label="พัสดุตกค้าง" value={pending} unit="ชิ้น" /><Stat icon="✓" tone="green" label="พัสดุรับแล้ว" value={128 + received - 2} unit="ชิ้น" /><Stat icon="♧" tone="gray" label="นักศึกษา/พักทั้งหมด" value="240" unit="คน" /></div>
-    <section className="filter-card"><b>ตัวกรองด่วน:</b>{filters.map(([value, label]) => <button key={value} className={`filter ${filter === value ? 'selected' : ''}`} onClick={() => setFilter(value)}>{label}</button>)}</section>
-    <section className="table-card"><h2>พัสดุลงทะเบียนล่าสุด</h2><div className="table-scroll"><table><thead><tr><th>เลขพัสดุ</th><th>ชื่อผู้รับ</th><th>ห้อง</th><th>ตึก</th><th>สถานะ</th><th>วันที่รับเข้า</th></tr></thead><tbody>{visiblePackages.length ? visiblePackages.map(({ item, index }) => <tr key={item.tracking} onClick={() => onEdit(item, index)}><td>{item.tracking}</td><td>{item.recipient}</td><td>{item.room}</td><td>หอพัก{item.building === 'A' ? 'ชาย' : 'หญิง'} ตึก {item.building}</td><td><span className={`badge ${item.status === 'รับแล้ว' ? 'done' : 'pending'}`}>{item.status}</span></td><td>{item.date}</td></tr>) : <tr><td colSpan="6">ไม่พบรายการพัสดุ</td></tr>}</tbody></table></div></section>
-  </section>
-}
-
-function Stat({ icon, tone, label, value, unit }) { return <article><span className={`stat-icon ${tone}`}>{icon}</span><p>{label}</p><strong>{value} <em>{unit}</em></strong></article> }
-
-function PackageForm({ form, setForm, photoUrl, setPhotoUrl, isEditing, onSave, onCancel }) {
-  const update = event => setForm(current => ({ ...current, [event.target.name]: event.target.value }))
-  const choosePhoto = event => { const file = event.target.files?.[0]; if (file) setPhotoUrl(URL.createObjectURL(file)) }
-  return <section className="page active-page"><div className="breadcrumbs">หน้าหลัก <span>/</span> จัดการพัสดุ <span>/</span> <b>{isEditing ? 'แก้ไขข้อมูลพัสดุ' : 'บันทึกพัสดุใหม่'}</b></div><section className="form-card"><form onSubmit={onSave}><div className="form-side"><h2>รายละเอียดพัสดุ</h2><div className="form-grid"><Field label="เลขพัสดุ (Tracking Number)" name="tracking" form={form} update={update} placeholder="เช่น PKG-20260901-001" required /><Field label="รหัสนักศึกษา" name="studentId" form={form} update={update} placeholder="6501012345" required /><Field label="ชื่อผู้รับ (นักศึกษา/ผู้รับ)" name="recipient" form={form} update={update} placeholder="สมชาย ใจดี" required /><Field label="เบอร์โทรศัพท์" name="phone" form={form} update={update} placeholder="0891234567" /><Field label="ห้อง" name="room" form={form} update={update} placeholder="A-204" required /><label>ตึกพัก<select name="building" value={form.building} onChange={update}><option value="A">หอพักชาย ตึก A</option><option value="B">หอพักหญิง ตึก B</option></select></label></div><label>หมายเหตุ<textarea name="note" value={form.note} onChange={update} placeholder="กรอกรายละเอียดเพิ่มเติม" /></label><div className="actions"><button className="primary" type="submit">บันทึกข้อมูลพัสดุ</button><button className="secondary" type="button" onClick={onCancel}>ยกเลิก</button></div></div><div className="photo-side"><h3>ถ่ายภาพกล่องพัสดุ</h3><div className="photo-preview" style={photoUrl ? { backgroundImage: `url(${photoUrl})` } : undefined}>{!photoUrl && <><span>📦</span><p>ยังไม่มีรูปภาพ</p></>}</div><div className="photo-actions"><label className="outline upload-label">▧&nbsp; เลือกไฟล์<input type="file" accept="image/*" hidden onChange={choosePhoto} /></label><button className="secondary" type="button" onClick={() => setPhotoUrl('')}>ล้างไฟล์</button></div></div></form></section></section>
-}
-
-function Field({ label, name, form, update, ...props }) { return <label>{label}<input name={name} value={form[name]} onChange={update} {...props} /></label> }
