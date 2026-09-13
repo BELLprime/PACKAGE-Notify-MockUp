@@ -309,9 +309,9 @@ const initialDatabasePackages = [
   {
     tracking: 'PKG-20260901-001',
     recipient: 'สมชาย ใจดี',
-    student_id: '65000001',
-    status: 'pending',
-    note: 'ชื่อไม่ตรงกับรหัส 65000001 (ในระบบคือ Natthakit Rodruean)',
+    student_id: null,
+    status: 'unknown',
+    note: 'ชื่อไม่ตรงกับฐานข้อมูลนักศึกษาในหอพัก',
     photo_url: 'https://images.unsplash.com/photo-1577705998148-6da4f3963bc8?auto=format&fit=crop&w=300&q=80',
     is_broadcasted: false,
     arrival_date: new Date('2026-09-01T14:30:00Z')

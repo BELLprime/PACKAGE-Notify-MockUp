@@ -10,19 +10,8 @@ export const studentProfiles = [
     phone: '089-123-4567',
     line_user_id: 'Bell',
     profileImage: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80',
-    packages: [
-      {
-        id: 'PKG-20260901-001',
-        sender: 'Kerry Express (ผู้รับบนกล่อง: สมชาย ใจดี)',
-        arrivedAt: '1 ก.ย. 2569 14:30',
-        status: 'รอรับ',
-        image: 'https://images.unsplash.com/photo-1577705998148-6da4f3963bc8?auto=format&fit=crop&w=150&q=80',
-        note: 'ชื่อไม่ตรงกับรหัส 65000001 (ในระบบคือ Natthakit Rodruean)'
-      }
-    ],
-    notifications: [
-      { time: '1 ก.ย. 14:30', message: 'พัสดุเลขที่ PKG-20260901-001 ถึงห้องพัสดุตึก S21 แล้ว แต่ชื่อผู้รับระบุ สมชาย ใจดี ไม่ตรงกับฐานข้อมูล' }
-    ]
+    packages: [],
+    notifications: []
   },
   {
     id: '65000002',
@@ -34,18 +23,8 @@ export const studentProfiles = [
     phone: '081-987-6543',
     line_user_id: 'Pama',
     profileImage: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=100&q=80',
-    packages: [
-      {
-        id: 'PKG-20260901-002',
-        sender: 'Watsons Online Thailand',
-        arrivedAt: '1 ก.ย. 2569 11:20',
-        status: 'รอรับ',
-        image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=150&q=80'
-      }
-    ],
-    notifications: [
-      { time: '1 ก.ย. 11:20', message: 'พัสดุใหม่ของคุณเลขที่ PKG-20260901-002 จาก Watsons ถึงห้องพัสดุตึก S20 แล้ว' }
-    ]
+    packages: [],
+    notifications: []
   },
   {
     id: '65000003',

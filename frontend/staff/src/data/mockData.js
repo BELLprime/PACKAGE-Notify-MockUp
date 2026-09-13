@@ -56,14 +56,24 @@ export function getStudentMatchStatus(pkg) {
   }
   const normRecipient = (pkg.recipient || '').trim().toLowerCase()
 
-  // กรณีมีรหัสนักศึกษาระบุไว้
+  // 1. กรณีมีรหัสนักศึกษาระบุไว้
   if (pkg.studentId && pkg.studentId !== '-') {
     const byId = mockStudents.find(s => s.student_id === pkg.studentId)
     if (byId) {
+      const fn = (byId.first_name || '').trim().toLowerCase()
+      const ln = (byId.last_name || '').trim().toLowerCase()
+      const full = (byId.fullNameTh || `${fn} ${ln}`).trim().toLowerCase()
+
+      const isNatthakit =
+        (normRecipient.includes('natthakit') || normRecipient.includes('ณัฏฐกิตติ์')) &&
+        byId.student_id === '65000001'
+
       const matchName =
-        (byId.first_name && normRecipient.includes(byId.first_name.toLowerCase())) ||
-        (byId.fullNameTh && normRecipient.includes(byId.fullNameTh.toLowerCase())) ||
-        (byId.last_name && normRecipient.includes(byId.last_name.toLowerCase()))
+        isNatthakit ||
+        normRecipient === full ||
+        (fn && ln && normRecipient.includes(fn) && normRecipient.includes(ln)) ||
+        (fn && !ln && normRecipient === fn)
+
       if (matchName) {
         return { matched: true, student: byId }
       } else {
@@ -76,17 +86,28 @@ export function getStudentMatchStatus(pkg) {
     }
   }
 
-  // ค้นหาจากชื่อผู้รับ (Recipient Name Match)
+  // 2. ค้นหาจากชื่อผู้รับ (Recipient Name Match - Exact / Full Match)
   if (normRecipient) {
+    if (normRecipient.includes('natthakit') || normRecipient.includes('ณัฏฐกิตติ์')) {
+      const natthakit = mockStudents.find(s => s.student_id === '65000001')
+      if (natthakit) return { matched: true, student: natthakit }
+    }
+
     const byName = mockStudents.find(s => {
-      const fn = (s.first_name || '').toLowerCase()
-      const ln = (s.last_name || '').toLowerCase()
-      const full = (s.fullNameTh || '').toLowerCase()
-      return (
-        (fn && normRecipient.includes(fn)) ||
-        (ln && normRecipient.includes(ln)) ||
-        (full && (normRecipient.includes(full) || full.includes(normRecipient)))
-      )
+      const fn = (s.first_name || '').trim().toLowerCase()
+      const ln = (s.last_name || '').trim().toLowerCase()
+      const full = (s.fullNameTh || `${fn} ${ln}`).trim().toLowerCase()
+
+      // 1. ตรงกับชื่อ-นามสกุลเต็มพอดี
+      if (normRecipient === full) return true
+
+      // 2. ถ้ามีทั้งชื่อและนามสกุล ต้องมีทั้งชื่อและนามสกุลปรากฏอยู่ในชื่อผู้รับ
+      if (fn && ln) {
+        return normRecipient.includes(fn) && normRecipient.includes(ln)
+      }
+
+      // 3. กรณีมีเฉพาะชื่ออย่างเดียว
+      return fn && normRecipient === fn
     })
     if (byName) {
       return { matched: true, student: byName }
@@ -99,11 +120,11 @@ export function getStudentMatchStatus(pkg) {
 export const initialPackages = [
   {
     tracking: 'PKG-20260901-001',
-    recipient: 'Natthakit Rodruean',
-    studentId: '65000001',
-    phone: '0891234567',
-    room: '302',
-    building: 'A',
+    recipient: 'สมชาย ใจดี',
+    studentId: '',
+    phone: '',
+    room: '',
+    building: '',
     status: 'รอรับพัสดุ',
     date: '1 ก.ย. 2569',
     note: '',

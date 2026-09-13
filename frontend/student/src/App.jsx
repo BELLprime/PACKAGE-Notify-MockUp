@@ -243,7 +243,6 @@ export default function App() {
 
       setStudentList(prevStudents => prevStudents.map(st => {
         const stPkgs = dbPkgs.filter(p => p.student_id === (st.student_id || st.id));
-        if (stPkgs.length === 0) return st;
         return {
           ...st,
           packages: stPkgs.map(p => ({
