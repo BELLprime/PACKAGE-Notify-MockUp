@@ -1,9 +1,13 @@
+const path = require('path');
 const Notification = require('../models/Notification');
 const Package = require('../models/Package');
 const Student = require('../models/Student');
 
+// เชื่อมต่อโมดูลจำลองการแจ้งเตือนจากโฟลเดอร์ notify-mockup (Task 16: Service Integration)
+const { formatLineMessage, mockSendNotification } = require(path.join(__dirname, '../../../notify-mockup/mock-line-notify'));
+
 /**
- * Task 13: โมดูลจำลองการส่งแจ้งเตือนรายบุคคล (Personal Notification Mockup - FR-02)
+ * Task 13 & 16: โมดูลจำลองการส่งแจ้งเตือนรายบุคคล (Personal Notification Mockup - FR-02)
  * จำลองการยิงข้อความไปยัง LINE Bot / LINE Notify ของนักศึกษาเจ้าของพัสดุเมื่อพัสดุมาถึง
  */
 const sendPersonalNotification = async (student, packageItem) => {
@@ -12,19 +16,20 @@ const sendPersonalNotification = async (student, packageItem) => {
     const lineId = student.line_user_id || 'UNKNOWN_LINE';
     const trackingNo = packageItem.tracking;
 
+    // เรียกใช้ฟังก์ชันจำลองการส่ง LINE จาก notify-mockup
+    const lineMockResult = mockSendNotification({
+      lineId,
+      studentName,
+      tracking: trackingNo,
+      recipient: packageItem.recipient,
+      room: student.room_number,
+      building: student.building,
+      arrivalDate: packageItem.arrival_date || Date.now(),
+      type: 'personal_arrival'
+    });
+
     const title = `📦 พัสดุของคุณมาถึงหอพักแล้ว! (${trackingNo})`;
-    const message = 
-`🔔 [แจ้งเตือนพัสดุหอพัก]
-สวัสดีคุณ ${studentName} (ห้อง ${student.room_number || '-'} ตึก ${student.building || '-'})
-มีพัสดุใหม่มาถึงหอพักแล้ว!
------------------------------------
-📦 เลขพัสดุ: ${trackingNo}
-👤 ชื่อผู้รับบนกล่อง: ${packageItem.recipient}
-🏢 สถานที่รับ: ห้องธุรการหอพัก
-📅 เวลาบันทึกเข้า: ${new Date(packageItem.arrival_date || Date.now()).toLocaleString('th-TH')}
-📲 ส่งไปยัง LINE ID: @${lineId}
------------------------------------
-⚠️ กรุณาเตรียมหลักฐานและเซ็นรับพัสดุผ่านระบบดิจิทัล`;
+    const message = lineMockResult.message;
 
     const notification = new Notification({
       student_id: student.student_id,
@@ -40,18 +45,13 @@ const sendPersonalNotification = async (student, packageItem) => {
 
     await notification.save();
 
-    console.log('\n======================================================');
-    console.log(`📱 [MOCK LINE BOT: พัสดุมาถึงใหม่] ส่งถึง: @${lineId}`);
-    console.log('======================================================');
-    console.log(message);
-    console.log('======================================================\n');
-
     return {
       success: true,
       deliveredTo: `@${lineId}`,
       student_id: student.student_id,
       tracking: trackingNo,
-      notification
+      notification,
+      lineMock: lineMockResult
     };
   } catch (error) {
     console.error('❌ Error sending personal notification:', error);
@@ -60,7 +60,7 @@ const sendPersonalNotification = async (student, packageItem) => {
 };
 
 /**
- * Task 14: ส่งแจ้งเตือนซ้ำเมื่อพัสดุค้างรับเกิน 5 ชั่วโมง (FR-03)
+ * Task 14 & 16: ส่งแจ้งเตือนซ้ำเมื่อพัสดุค้างรับเกิน 5 ชั่วโมง (FR-03)
  */
 const sendReminderNotification = async (student, packageItem, hoursPassed = 5) => {
   try {
@@ -68,18 +68,20 @@ const sendReminderNotification = async (student, packageItem, hoursPassed = 5) =
     const lineId = student.line_user_id || 'UNKNOWN_LINE';
     const trackingNo = packageItem.tracking;
 
+    // เรียกใช้ฟังก์ชันจำลองการส่ง LINE แจ้งเตือนซ้ำจาก notify-mockup
+    const lineMockResult = mockSendNotification({
+      lineId,
+      studentName,
+      tracking: trackingNo,
+      room: student.room_number,
+      building: student.building,
+      arrivalDate: packageItem.arrival_date,
+      type: 'reminder_5h',
+      hoursPassed
+    });
+
     const title = `⚠️ แจ้งเตือนซ้ำ: พัสดุ ${trackingNo} ค้างรับเกิน ${hoursPassed} ชั่วโมง`;
-    const message = 
-`⚠️ [แจ้งเตือนซ้ำ: พัสดุค้างรับเกิน 5 ชั่วโมง]
-สวัสดีคุณ ${studentName} (ห้อง ${student.room_number || '-'} ตึก ${student.building || '-'})
------------------------------------
-📦 เลขพัสดุ: ${trackingNo}
-📅 เวลาที่รับเข้า: ${new Date(packageItem.arrival_date).toLocaleString('th-TH')}
-⏳ ค้างรับมาแล้วกว่า: ${hoursPassed} ชั่วโมง
-🏢 สถานที่รับ: ห้องธุรการหอพัก
-📲 ส่งตรงถึง LINE: @${lineId}
------------------------------------
-⚠️ พัสดุของท่านยังไม่ได้รับการติดต่อขอรับ กรุณาติดต่อรับพัสดุและลงลายมือชื่อดิจิทัลโดยเร็วครับ`;
+    const message = lineMockResult.message;
 
     // 1. บันทึกประวัติการแจ้งเตือนซ้ำลง Collection notifications
     const notification = new Notification({
@@ -101,18 +103,13 @@ const sendReminderNotification = async (student, packageItem, hoursPassed = 5) =
     packageItem.reminder_sent_at = new Date();
     await packageItem.save();
 
-    console.log('\n======================================================');
-    console.log(`⏰ [MOCK LINE BOT: แจ้งเตือนซ้ำ 5 ชม.] ส่งถึง: @${lineId}`);
-    console.log('======================================================');
-    console.log(message);
-    console.log('======================================================\n');
-
     return {
       success: true,
       deliveredTo: `@${lineId}`,
       tracking: trackingNo,
       hoursPassed,
-      notification
+      notification,
+      lineMock: lineMockResult
     };
   } catch (error) {
     console.error('❌ Error sending reminder notification:', error);
