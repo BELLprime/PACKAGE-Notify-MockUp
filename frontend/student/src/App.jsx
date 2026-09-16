@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, Fragment } from 'react'
 import SignatureCanvas from 'react-signature-canvas'
 import { ChatTimelineFilterBar, BroadcastChatCard, ClaimModal } from './components/BroadcastBoard'
 import { studentProfiles, initialBroadcastPackages } from './data/mockData'
+import { studentApi } from './services/apiClient'
 import '../style.css'
 
 export default function App() {
@@ -112,15 +113,12 @@ export default function App() {
 
     // ส่งคำสั่ง PUT ไปยัง Backend API / MongoDB
     try {
-      await fetch(`http://localhost:5000/api/packages/${pkgId}/claim`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          claimed_by: studentClaimant,
-          claim_proof: claimEvidence.trim(),
-          student_id: currentStudent.student_id || currentStudent.id
-        })
-      });
+      await studentApi.claimPackage(
+        pkgId,
+        studentClaimant,
+        claimEvidence.trim(),
+        currentStudent.student_id || currentStudent.id
+      );
     } catch (err) {
       console.warn('Backend claim failed:', err);
     }
@@ -164,7 +162,7 @@ export default function App() {
         message: '🔄 รีเซ็ตข้อมูลระบบนักศึกษากลับสู่ค่าเริ่มต้นเรียบร้อยแล้ว'
       });
       try {
-        await fetch('http://localhost:5000/api/packages/reset', { method: 'POST' });
+        await studentApi.resetDatabase();
       } catch (e) {}
     }
   };
@@ -183,10 +181,8 @@ export default function App() {
   // ซิงค์ข้อมูลพัสดุจริงจาก Backend API / MongoDB เข้าสู่โปรไฟล์นักศึกษา
   const syncPackagesFromDB = async (isInitial = false) => {
     try {
-      const res = await fetch('http://localhost:5000/api/packages');
-      if (!res.ok) return;
-      const json = await res.json();
-      if (!json.success || !Array.isArray(json.data) || json.data.length === 0) return;
+      const json = await studentApi.getPackages();
+      if (!json || !json.success || !Array.isArray(json.data) || json.data.length === 0) return;
       const dbPkgs = json.data;
 
       // ตรวจหาพัสดุใหม่ที่เพิ่งเพิ่มเข้ามาในระบบ
@@ -271,10 +267,8 @@ export default function App() {
 
     const pollBroadcasts = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/packages/broadcasts');
-        if (!res.ok) return;
-        const json = await res.json();
-        if (!json.success || !Array.isArray(json.data)) return;
+        const json = await studentApi.getBroadcasts();
+        if (!json || !json.success || !Array.isArray(json.data)) return;
 
         // ตรวจสอบว่ามีการอัปเดตข้อมูลใน MongoDB หรือไม่ (เช่น เพิ่มพัสดุใหม่ เซ็นรับ หรือเคลมพัสดุ)
         if (json.lastUpdateTime) {
@@ -475,16 +469,13 @@ export default function App() {
 
     const pkgId = selectedPackage.id || selectedPackage.tracking;
 
-    // ส่งคำสั่ง PUT ไปยัง Backend API / MongoDB (FR-03 & Task 12)
+    // ส่งคำสั่ง PUT ไปยัง Backend API / MongoDB (FR-05 & Task 12)
     try {
-      await fetch(`http://localhost:5000/api/packages/${pkgId}/receive`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          signature_data: signatureData,
-          student_id: currentStudent.student_id || currentStudent.id
-        })
-      });
+      await studentApi.receivePackage(
+        pkgId,
+        signatureData,
+        currentStudent.student_id || currentStudent.id
+      );
     } catch (err) {
       console.warn('Backend update failed:', err);
     }

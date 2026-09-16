@@ -7,6 +7,7 @@ import UnknownPackages from './components/UnknownPackages'
 import ConfirmDeleteModal from './components/ConfirmDeleteModal'
 import Toast from './components/Toast'
 import { initialPackages, blankForm, getStudentMatchStatus, mockStudents } from './data/mockData'
+import { staffApi } from './services/apiClient'
 
 export default function App() {
   const [page, setPage] = useState('dashboard') // 'dashboard' | 'packages' | 'package-form' | 'unknown'
@@ -27,10 +28,8 @@ export default function App() {
   useEffect(() => {
     const syncFromBackend = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/packages')
-        if (!res.ok) return
-        const json = await res.json()
-        if (!json.success || !Array.isArray(json.data)) return
+        const json = await staffApi.getPackages()
+        if (!json || !json.success || !Array.isArray(json.data)) return
 
         const serverUpdateTime = json.lastUpdateTime || 0
         const serverResetTime = json.resetTime || 0
@@ -202,19 +201,15 @@ export default function App() {
       editingIndex === null ? 'บันทึกพัสดุใหม่เรียบร้อยแล้ว' : 'อัปเดตข้อมูลพัสดุเรียบร้อยแล้ว'
     )
 
-    // บันทึกและซิงค์ไปยัง Backend API (Port 5000) ทันที เพื่อส่งข้อมูลลง MongoDB และแจ้งเตือนไปยัง Student UI!
+    // บันทึกและซิงค์ไปยัง Backend API ทันที เพื่อส่งข้อมูลลง MongoDB และแจ้งเตือนไปยัง Student UI!
     try {
       if (editingIndex === null) {
-        await fetch('http://localhost:5000/api/packages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tracking: item.tracking,
-            recipient: item.recipient,
-            photo_url: photoUrl,
-            note: item.note,
-            student_id: item.studentId !== '-' ? item.studentId : null
-          })
+        await staffApi.createPackage({
+          tracking: item.tracking,
+          recipient: item.recipient,
+          photo_url: photoUrl,
+          note: item.note,
+          student_id: item.studentId !== '-' ? item.studentId : null
         })
       }
     } catch (err) {
@@ -234,7 +229,7 @@ export default function App() {
       setPackages(initialPackages)
       setToast('🔄 รีเซ็ตข้อมูลพัสดุกลับสู่ค่าเริ่มต้นเรียบร้อยแล้ว')
       try {
-        await fetch('http://localhost:5000/api/packages/reset', { method: 'POST' })
+        await staffApi.resetDatabase()
       } catch (err) {}
     }
   }
@@ -260,17 +255,13 @@ export default function App() {
 
     // ซิงค์กับ Backend API เพื่อให้ Student UI เด้งแจ้งเตือนแบบ Real-time!
     try {
-      await fetch('http://localhost:5000/api/packages/broadcast', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tracking: target.tracking,
-          recipient: target.recipient,
-          photoUrl: target.photoUrl,
-          note: target.note,
-          carrier: target.carrier || 'Flash Express',
-          foundLocation: `ห้องพัสดุตึก ${target.building || 'A'}`
-        })
+      await staffApi.broadcastPackage({
+        tracking: target.tracking,
+        recipient: target.recipient,
+        photoUrl: target.photoUrl,
+        note: target.note,
+        carrier: target.carrier || 'Flash Express',
+        foundLocation: `ห้องพัสดุตึก ${target.building || 'A'}`
       })
     } catch (err) {
       console.warn('Backend offline or not running:', err.message)
@@ -310,17 +301,13 @@ export default function App() {
     // ซิงค์ทุกชิ้นไปยัง Backend
     for (const target of unMatchedToBroadcast) {
       try {
-        await fetch('http://localhost:5000/api/packages/broadcast', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tracking: target.tracking,
-            recipient: target.recipient,
-            photoUrl: target.photoUrl,
-            note: target.note,
-            carrier: target.carrier || 'Flash Express',
-            foundLocation: `ห้องพัสดุตึก ${target.building || 'A'}`
-          })
+        await staffApi.broadcastPackage({
+          tracking: target.tracking,
+          recipient: target.recipient,
+          photoUrl: target.photoUrl,
+          note: target.note,
+          carrier: target.carrier || 'Flash Express',
+          foundLocation: `ห้องพัสดุตึก ${target.building || 'A'}`
         })
       } catch (err) {}
     }
@@ -350,11 +337,7 @@ export default function App() {
 
     if (target) {
       try {
-        await fetch(`http://localhost:5000/api/packages/${target.tracking}/match`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ student_id: student.student_id })
-        })
+        await staffApi.manualMatchPackage(target.tracking, student.student_id)
       } catch (err) {
         console.warn('Backend match sync failed:', err.message)
       }
