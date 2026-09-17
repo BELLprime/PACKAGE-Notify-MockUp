@@ -369,6 +369,8 @@ export default function App() {
     };
 
     pollBroadcasts();
+    const timer = setInterval(pollBroadcasts, 2000);
+    return () => clearInterval(timer);
   }, []);
 
   // ดึงข้อมูลเมื่อผู้ใช้สลับห้องแชท หรือเปลี่ยนตัวกรองไทม์ไลน์ (On-demand)

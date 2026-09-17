@@ -18,8 +18,10 @@ app.use(cors({
   credentials: true
 }));
 
-// 2. HTTP Request Logger (Morgan) - dev แสดงสีเข้าใจง่าย, prod เก็บ log ละเอียด
-app.use(morgan(config.isProduction ? 'combined' : 'dev'));
+// 2. HTTP Request Logger (Morgan) - dev แสดงสีเข้าใจง่าย, กรอง log 304 จาก polling เพื่อไม่ให้รกหน้าจอ
+app.use(morgan(config.isProduction ? 'combined' : 'dev', {
+  skip: (req, res) => res.statusCode === 304
+}));
 
 // 3. Body Parser (รองรับ Base64 สำหรับลายเซ็นดิจิทัล FR-05)
 app.use(express.json({ limit: '10mb' }));

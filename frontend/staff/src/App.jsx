@@ -76,15 +76,12 @@ export default function App() {
     }
   }
 
-  // ซิงค์ครั้งแรกเมื่อโหลดหน้าเว็บ
+  // Real-time synchronization กับ Backend API / MongoDB อัตโนมัติ
   useEffect(() => {
     syncFromBackend(true)
+    const timer = setInterval(() => syncFromBackend(), 2000)
+    return () => clearInterval(timer)
   }, [])
-
-  // ซิงค์เมื่อผู้ใช้สลับหน้า/แท็บ (On-demand)
-  useEffect(() => {
-    syncFromBackend()
-  }, [page])
 
   useEffect(() => {
     localStorage.setItem('dorm-packages', JSON.stringify(packages))
