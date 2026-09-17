@@ -20,12 +20,14 @@ PACKAGE-Notify-MockUp/
 ├── README.md
 ├── .gitignore
 │
-├── docs/                   # เอกสารฝั่ง ISO 29110 (PM + SI)
+├── Documents/              # เอกสารฝั่ง ISO 29110 (PM + SI)
 │   ├── requirements-spec.md        # FR-01 ถึง FR-05, NFR-01, NFR-02
-│   ├── software-design-document.md # สถาปัตยกรรมและการออกแบบระบบ (Task 5)
+│   ├── Software-Design-Document.md # สถาปัตยกรรมและการออกแบบระบบฉบับปัจจุบัน (Task 5, v2.0)
+│   ├── Test-Cases.md               # รายละเอียดชุดการทดสอบระบบสำหรับผู้ทดสอบ (Task 17)
+│   ├── API_CONTRACT.md             # สัญญาข้อมูล REST API ทั้ง 16 Endpoints
 │   ├── traceability-matrix.md      # SI.3
-│   ├── test-report.md              # SI.5
-│   └── user-manual.md              # SI.6
+│   ├── test-report.md              # SI.5 (Task 18)
+│   └── user-manual.md              # SI.6 (Task 19)
 │
 ├── backend/                # Server ฝั่ง Backend (Node.js + Express + MongoDB)
 │   ├── src/
