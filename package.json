@@ -1,6 +1,25 @@
 {
+  "name": "dormitory-package-notification-system",
+  "version": "1.0.0",
+  "description": "RMUTL Smart Dormitory Package Notification & Tracking System (ENGSE205 Integration)",
+  "private": true,
+  "scripts": {
+    "start": "concurrently -n \"BACKEND,STAFF,STUDENT\" -c \"cyan.bold,green.bold,yellow.bold\" \"npm --prefix backend start\" \"npm --prefix frontend/staff run dev\" \"npm --prefix frontend/student run dev\"",
+    "dev": "concurrently -n \"BACKEND,STAFF,STUDENT\" -c \"cyan.bold,green.bold,yellow.bold\" \"npm --prefix backend start\" \"npm --prefix frontend/staff run dev\" \"npm --prefix frontend/student run dev\"",
+    "dev:backend": "npm --prefix backend start",
+    "dev:staff": "npm --prefix frontend/staff run dev",
+    "dev:student": "npm --prefix frontend/student run dev",
+    "test": "npm --prefix backend test",
+    "test:backend": "npm --prefix backend test",
+    "build": "npm --prefix frontend/staff run build && npm --prefix frontend/student run build",
+    "build:staff": "npm --prefix frontend/staff run build",
+    "build:student": "npm --prefix frontend/student run build"
+  },
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
   }
 }
