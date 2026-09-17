@@ -16,6 +16,14 @@ before(async () => {
 });
 
 after(async () => {
+  try {
+    // ลบพัสดุจำลองที่ถูกสร้างขึ้นระหว่างการทดสอบ เพื่อไม่ให้ปะปนกับฐานข้อมูลจริง
+    await Package.deleteMany({
+      tracking: { $regex: /^(TEST-PKG|SIGN-TEST|BCAST-TEST)/ }
+    });
+  } catch (err) {
+    // ignore
+  }
   if (mongoose.connection.readyState !== 0) {
     await mongoose.connection.close();
   }

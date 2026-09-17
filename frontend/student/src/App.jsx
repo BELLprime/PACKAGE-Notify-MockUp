@@ -368,9 +368,34 @@ export default function App() {
       }
     };
 
-    const timer = setInterval(pollBroadcasts, 2000);
-    return () => clearInterval(timer);
+    pollBroadcasts();
   }, []);
+
+  // ดึงข้อมูลเมื่อผู้ใช้สลับห้องแชท หรือเปลี่ยนตัวกรองไทม์ไลน์ (On-demand)
+  useEffect(() => {
+    const fetchLatest = async () => {
+      try {
+        const json = await studentApi.getBroadcasts();
+        if (json && json.success && Array.isArray(json.data)) {
+          setBroadcastPackages(prev => {
+            return prev.map(p => {
+              const serverMatch = json.data.find(item => item.tracking === p.tracking);
+              if (serverMatch) {
+                return {
+                  ...p,
+                  status: serverMatch.status === 'claimed' ? 'claimed' : (serverMatch.status === 'received' ? 'matched' : p.status),
+                  claimedBy: serverMatch.claimed_by || p.claimedBy,
+                  claimProof: serverMatch.claim_proof || p.claimProof
+                };
+              }
+              return p;
+            });
+          });
+        }
+      } catch (e) {}
+    };
+    fetchLatest();
+  }, [chatTimelineFilter, selectedChatId, mobileOpenChatId]);
 
   const handleToastItemClick = (toast) => {
     setSelectedChatId(toast.chatId || 'dormtrack');

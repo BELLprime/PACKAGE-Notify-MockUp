@@ -24,63 +24,67 @@ export default function App() {
   const lastUpdateRef = useRef(0)
   const lastResetRef = useRef(0)
 
-  // Real-time synchronization กับ Backend API / MongoDB
-  useEffect(() => {
-    const syncFromBackend = async () => {
-      try {
-        const json = await staffApi.getPackages()
-        if (!json || !json.success || !Array.isArray(json.data)) return
+  // ดึงข้อมูลและตรวจสอบการซิงค์กับ Backend API / MongoDB
+  const syncFromBackend = async (force = false) => {
+    try {
+      const json = await staffApi.getPackages()
+      if (!json || !json.success || !Array.isArray(json.data)) return
 
-        const serverUpdateTime = json.lastUpdateTime || 0
-        const serverResetTime = json.resetTime || 0
+      const serverUpdateTime = json.lastUpdateTime || 0
+      const serverResetTime = json.resetTime || 0
 
-        // หากมีการกดปุ่มรีเซ็ตระบบ
-        if (lastResetRef.current && serverResetTime > lastResetRef.current) {
-          lastResetRef.current = serverResetTime
-          lastUpdateRef.current = serverUpdateTime
-          localStorage.removeItem('dorm-packages')
-          setPackages(initialPackages)
-          return
-        }
-
-        if (serverUpdateTime > lastUpdateRef.current) {
-          lastUpdateRef.current = serverUpdateTime
-          if (serverResetTime) lastResetRef.current = serverResetTime
-
-          const mapped = json.data.map(p => {
-            const rawStatus = p.status
-            const displayStatus = rawStatus === 'received' ? 'รับแล้ว' : 'รอรับพัสดุ'
-            const match = getStudentMatchStatus({ recipient: p.recipient, studentId: p.student_id })
-            const matchedStudent = match.matched ? match.student : null
-
-            return {
-              tracking: p.tracking,
-              recipient: p.recipient,
-              studentId: matchedStudent ? matchedStudent.student_id : (p.student_id || '-'),
-              phone: matchedStudent ? matchedStudent.phone : '-',
-              room: matchedStudent ? `${matchedStudent.building}-${matchedStudent.room_number}` : '-',
-              building: matchedStudent ? matchedStudent.building : '-',
-              status: displayStatus,
-              isBroadcasted: Boolean(p.is_broadcasted),
-              claimedBy: p.claimed_by || null,
-              signatureData: p.signature_data || null,
-              photoUrl: p.photo_url || '',
-              date: p.arrival_date ? new Date(p.arrival_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : 'วันนี้',
-              note: p.note || ''
-            }
-          })
-
-          setPackages(mapped)
-        }
-      } catch (e) {
-        // Backend offline; ใช้งานข้อมูลใน LocalStorage ต่อเนื่อง
+      // หากมีการกดปุ่มรีเซ็ตระบบ
+      if (lastResetRef.current && serverResetTime > lastResetRef.current) {
+        lastResetRef.current = serverResetTime
+        lastUpdateRef.current = serverUpdateTime
+        localStorage.removeItem('dorm-packages')
+        setPackages(initialPackages)
+        return
       }
-    }
 
-    syncFromBackend()
-    const timer = setInterval(syncFromBackend, 2000)
-    return () => clearInterval(timer)
+      if (force || serverUpdateTime > lastUpdateRef.current || lastUpdateRef.current === 0) {
+        lastUpdateRef.current = serverUpdateTime
+        if (serverResetTime) lastResetRef.current = serverResetTime
+
+        const mapped = json.data.map(p => {
+          const rawStatus = p.status
+          const displayStatus = rawStatus === 'received' ? 'รับแล้ว' : 'รอรับพัสดุ'
+          const match = getStudentMatchStatus({ recipient: p.recipient, studentId: p.student_id })
+          const matchedStudent = match.matched ? match.student : null
+
+          return {
+            tracking: p.tracking,
+            recipient: p.recipient,
+            studentId: matchedStudent ? matchedStudent.student_id : (p.student_id || '-'),
+            phone: matchedStudent ? matchedStudent.phone : '-',
+            room: matchedStudent ? `${matchedStudent.building}-${matchedStudent.room_number}` : '-',
+            building: matchedStudent ? matchedStudent.building : '-',
+            status: displayStatus,
+            isBroadcasted: Boolean(p.is_broadcasted),
+            claimedBy: p.claimed_by || null,
+            signatureData: p.signature_data || null,
+            photoUrl: p.photo_url || '',
+            date: p.arrival_date ? new Date(p.arrival_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : 'วันนี้',
+            note: p.note || ''
+          }
+        })
+
+        setPackages(mapped)
+      }
+    } catch (e) {
+      // Backend offline; ใช้งานข้อมูลใน LocalStorage ต่อเนื่อง
+    }
+  }
+
+  // ซิงค์ครั้งแรกเมื่อโหลดหน้าเว็บ
+  useEffect(() => {
+    syncFromBackend(true)
   }, [])
+
+  // ซิงค์เมื่อผู้ใช้สลับหน้า/แท็บ (On-demand)
+  useEffect(() => {
+    syncFromBackend()
+  }, [page])
 
   useEffect(() => {
     localStorage.setItem('dorm-packages', JSON.stringify(packages))
@@ -352,6 +356,10 @@ export default function App() {
         onGoPackages={openManagePackages}
         onGoUnknown={openUnknownPackages}
         onReset={handleResetData}
+        onRefresh={() => {
+          syncFromBackend(true)
+          setToast('🔄 ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์เรียบร้อย')
+        }}
         unmatchedCount={unmatchedCount}
       />
 
