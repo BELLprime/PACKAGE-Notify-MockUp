@@ -7,6 +7,7 @@ import UnknownPackages from './components/UnknownPackages'
 import ConfirmDeleteModal from './components/ConfirmDeleteModal'
 import Toast from './components/Toast'
 import { initialPackages, blankForm, getStudentMatchStatus, mockStudents } from './data/mockData'
+import { staffApi } from './services/apiClient'
 
 export default function App() {
   const [page, setPage] = useState('dashboard') // 'dashboard' | 'packages' | 'package-form' | 'unknown'
@@ -23,63 +24,62 @@ export default function App() {
   const lastUpdateRef = useRef(0)
   const lastResetRef = useRef(0)
 
-  // Real-time synchronization กับ Backend API / MongoDB
-  useEffect(() => {
-    const syncFromBackend = async () => {
-      try {
-        const res = await fetch('http://localhost:5000/api/packages')
-        if (!res.ok) return
-        const json = await res.json()
-        if (!json.success || !Array.isArray(json.data)) return
+  // ดึงข้อมูลและตรวจสอบการซิงค์กับ Backend API / MongoDB
+  const syncFromBackend = async (force = false) => {
+    try {
+      const json = await staffApi.getPackages()
+      if (!json || !json.success || !Array.isArray(json.data)) return
 
-        const serverUpdateTime = json.lastUpdateTime || 0
-        const serverResetTime = json.resetTime || 0
+      const serverUpdateTime = json.lastUpdateTime || 0
+      const serverResetTime = json.resetTime || 0
 
-        // หากมีการกดปุ่มรีเซ็ตระบบ
-        if (lastResetRef.current && serverResetTime > lastResetRef.current) {
-          lastResetRef.current = serverResetTime
-          lastUpdateRef.current = serverUpdateTime
-          localStorage.removeItem('dorm-packages')
-          setPackages(initialPackages)
-          return
-        }
-
-        if (serverUpdateTime > lastUpdateRef.current) {
-          lastUpdateRef.current = serverUpdateTime
-          if (serverResetTime) lastResetRef.current = serverResetTime
-
-          const mapped = json.data.map(p => {
-            const rawStatus = p.status
-            const displayStatus = rawStatus === 'received' ? 'รับแล้ว' : 'รอรับพัสดุ'
-            const match = getStudentMatchStatus({ recipient: p.recipient, studentId: p.student_id })
-            const matchedStudent = match.matched ? match.student : null
-
-            return {
-              tracking: p.tracking,
-              recipient: p.recipient,
-              studentId: matchedStudent ? matchedStudent.student_id : (p.student_id || '-'),
-              phone: matchedStudent ? matchedStudent.phone : '-',
-              room: matchedStudent ? `${matchedStudent.building}-${matchedStudent.room_number}` : '-',
-              building: matchedStudent ? matchedStudent.building : '-',
-              status: displayStatus,
-              isBroadcasted: Boolean(p.is_broadcasted),
-              claimedBy: p.claimed_by || null,
-              signatureData: p.signature_data || null,
-              photoUrl: p.photo_url || '',
-              date: p.arrival_date ? new Date(p.arrival_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : 'วันนี้',
-              note: p.note || ''
-            }
-          })
-
-          setPackages(mapped)
-        }
-      } catch (e) {
-        // Backend offline; ใช้งานข้อมูลใน LocalStorage ต่อเนื่อง
+      // หากมีการกดปุ่มรีเซ็ตระบบ
+      if (lastResetRef.current && serverResetTime > lastResetRef.current) {
+        lastResetRef.current = serverResetTime
+        lastUpdateRef.current = serverUpdateTime
+        localStorage.removeItem('dorm-packages')
+        setPackages(initialPackages)
+        return
       }
-    }
 
-    syncFromBackend()
-    const timer = setInterval(syncFromBackend, 2000)
+      if (force || serverUpdateTime > lastUpdateRef.current || lastUpdateRef.current === 0) {
+        lastUpdateRef.current = serverUpdateTime
+        if (serverResetTime) lastResetRef.current = serverResetTime
+
+        const mapped = json.data.map(p => {
+          const rawStatus = p.status
+          const displayStatus = rawStatus === 'received' ? 'รับแล้ว' : 'รอรับพัสดุ'
+          const match = getStudentMatchStatus({ recipient: p.recipient, studentId: p.student_id })
+          const matchedStudent = match.matched ? match.student : null
+
+          return {
+            tracking: p.tracking,
+            recipient: p.recipient,
+            studentId: matchedStudent ? matchedStudent.student_id : (p.student_id || '-'),
+            phone: matchedStudent ? matchedStudent.phone : '-',
+            room: matchedStudent ? `${matchedStudent.building}-${matchedStudent.room_number}` : '-',
+            building: matchedStudent ? matchedStudent.building : '-',
+            status: displayStatus,
+            isBroadcasted: Boolean(p.is_broadcasted),
+            claimedBy: p.claimed_by || null,
+            signatureData: p.signature_data || null,
+            photoUrl: p.photo_url || '',
+            date: p.arrival_date ? new Date(p.arrival_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : 'วันนี้',
+            note: p.note || ''
+          }
+        })
+
+        setPackages(mapped)
+      }
+    } catch (e) {
+      // Backend offline; ใช้งานข้อมูลใน LocalStorage ต่อเนื่อง
+    }
+  }
+
+  // Real-time synchronization กับ Backend API / MongoDB อัตโนมัติ
+  useEffect(() => {
+    syncFromBackend(true)
+    const timer = setInterval(() => syncFromBackend(), 2000)
     return () => clearInterval(timer)
   }, [])
 
@@ -202,19 +202,15 @@ export default function App() {
       editingIndex === null ? 'บันทึกพัสดุใหม่เรียบร้อยแล้ว' : 'อัปเดตข้อมูลพัสดุเรียบร้อยแล้ว'
     )
 
-    // บันทึกและซิงค์ไปยัง Backend API (Port 5000) ทันที เพื่อส่งข้อมูลลง MongoDB และแจ้งเตือนไปยัง Student UI!
+    // บันทึกและซิงค์ไปยัง Backend API ทันที เพื่อส่งข้อมูลลง MongoDB และแจ้งเตือนไปยัง Student UI!
     try {
       if (editingIndex === null) {
-        await fetch('http://localhost:5000/api/packages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tracking: item.tracking,
-            recipient: item.recipient,
-            photo_url: photoUrl,
-            note: item.note,
-            student_id: item.studentId !== '-' ? item.studentId : null
-          })
+        await staffApi.createPackage({
+          tracking: item.tracking,
+          recipient: item.recipient,
+          photo_url: photoUrl,
+          note: item.note,
+          student_id: item.studentId !== '-' ? item.studentId : null
         })
       }
     } catch (err) {
@@ -234,7 +230,7 @@ export default function App() {
       setPackages(initialPackages)
       setToast('🔄 รีเซ็ตข้อมูลพัสดุกลับสู่ค่าเริ่มต้นเรียบร้อยแล้ว')
       try {
-        await fetch('http://localhost:5000/api/packages/reset', { method: 'POST' })
+        await staffApi.resetDatabase()
       } catch (err) {}
     }
   }
@@ -260,17 +256,13 @@ export default function App() {
 
     // ซิงค์กับ Backend API เพื่อให้ Student UI เด้งแจ้งเตือนแบบ Real-time!
     try {
-      await fetch('http://localhost:5000/api/packages/broadcast', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tracking: target.tracking,
-          recipient: target.recipient,
-          photoUrl: target.photoUrl,
-          note: target.note,
-          carrier: target.carrier || 'Flash Express',
-          foundLocation: `ห้องพัสดุตึก ${target.building || 'A'}`
-        })
+      await staffApi.broadcastPackage({
+        tracking: target.tracking,
+        recipient: target.recipient,
+        photoUrl: target.photoUrl,
+        note: target.note,
+        carrier: target.carrier || 'Flash Express',
+        foundLocation: `ห้องพัสดุตึก ${target.building || 'A'}`
       })
     } catch (err) {
       console.warn('Backend offline or not running:', err.message)
@@ -310,17 +302,13 @@ export default function App() {
     // ซิงค์ทุกชิ้นไปยัง Backend
     for (const target of unMatchedToBroadcast) {
       try {
-        await fetch('http://localhost:5000/api/packages/broadcast', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tracking: target.tracking,
-            recipient: target.recipient,
-            photoUrl: target.photoUrl,
-            note: target.note,
-            carrier: target.carrier || 'Flash Express',
-            foundLocation: `ห้องพัสดุตึก ${target.building || 'A'}`
-          })
+        await staffApi.broadcastPackage({
+          tracking: target.tracking,
+          recipient: target.recipient,
+          photoUrl: target.photoUrl,
+          note: target.note,
+          carrier: target.carrier || 'Flash Express',
+          foundLocation: `ห้องพัสดุตึก ${target.building || 'A'}`
         })
       } catch (err) {}
     }
@@ -350,11 +338,7 @@ export default function App() {
 
     if (target) {
       try {
-        await fetch(`http://localhost:5000/api/packages/${target.tracking}/match`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ student_id: student.student_id })
-        })
+        await staffApi.manualMatchPackage(target.tracking, student.student_id)
       } catch (err) {
         console.warn('Backend match sync failed:', err.message)
       }
@@ -369,6 +353,10 @@ export default function App() {
         onGoPackages={openManagePackages}
         onGoUnknown={openUnknownPackages}
         onReset={handleResetData}
+        onRefresh={() => {
+          syncFromBackend(true)
+          setToast('🔄 ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์เรียบร้อย')
+        }}
         unmatchedCount={unmatchedCount}
       />
 

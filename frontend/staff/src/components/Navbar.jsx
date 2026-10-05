@@ -6,6 +6,7 @@ export default function Navbar({
   onGoPackages,
   onGoUnknown,
   onReset,
+  onRefresh,
   unmatchedCount = 0
 }) {
   return (
@@ -52,6 +53,17 @@ export default function Navbar({
       </nav>
 
       <div className="profile-container" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {onRefresh && (
+          <button
+            type="button"
+            className="secondary btn-sm"
+            onClick={onRefresh}
+            style={{ fontSize: '11.5px', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' }}
+            title="รีเฟรชดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์"
+          >
+            🔄 รีเฟรช
+          </button>
+        )}
         {onReset && (
           <button
             type="button"
@@ -60,7 +72,7 @@ export default function Navbar({
             style={{ fontSize: '11.5px', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' }}
             title="รีเซ็ตข้อมูลพัสดุทั้งหมดกลับสู่ค่าเริ่มต้นสำหรับการทดสอบ"
           >
-            🔄 รีเซ็ตเริ่มต้น
+            ⚙️ รีเซ็ตเริ่มต้น
           </button>
         )}
         <button className="profile" type="button" aria-label="ข้อมูลผู้ใช้">
