@@ -1,4 +1,4 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 const path = require('path');
 const Package = require('../models/Package');
 const Student = require('../models/Student');
