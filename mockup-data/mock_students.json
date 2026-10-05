@@ -38,5 +38,13 @@
     "building": "S20",
     "room_number": "222",
     "line_user_id": "Pama_confused99"
+  },
+  {
+    "student_id": "651234567-1",
+    "first_name": "สมชาย",
+    "last_name": "รักเรียน",
+    "building": "A1",
+    "room_number": "101",
+    "line_user_id": "Somchai"
   }
 ]

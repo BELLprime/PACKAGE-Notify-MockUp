@@ -95,7 +95,7 @@ const withTimeout = (p, ms, msg) => Promise.race([
 ]);
 
 // ── เปิด API + เชื่อมต่อ MongoDB ──
-let app = null, request = null, mongoose = null, connectDB = null, Package = null, Notification = null;
+let app = null, request = null, mongoose = null, connectDB = null, Package = null, Notification = null, Student = null;
 async function setup() {
   try {
     if (!existsSync(path.join(BACKEND, 'node_modules'))) throw new Error('ยังไม่ได้ npm install ในโฟลเดอร์ backend');
@@ -105,8 +105,23 @@ async function setup() {
     app = require('./src/app');
     Package = require('./src/models/Package');
     Notification = require('./src/models/Notification');
+    Student = require('./src/models/Student');
     capture();
     await withTimeout(connectDB(), 10000, 'เชื่อมต่อ MongoDB ไม่สำเร็จภายใน 10 วินาที');
+    await Student.updateOne(
+      { student_id: '651234567-1' },
+      {
+        $set: {
+          student_id: '651234567-1',
+          first_name: 'สมชาย',
+          last_name: 'รักเรียน',
+          building: SOMCHAI.building,
+          room_number: SOMCHAI.room,
+          line_user_id: SOMCHAI.line,
+        },
+      },
+      { upsert: true }
+    );
     return true;
   } catch (e) {
     release();

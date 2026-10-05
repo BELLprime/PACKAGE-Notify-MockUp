@@ -72,15 +72,18 @@ const initialDatabasePackages = [
 const seedDatabaseIfEmpty = async () => {
   try {
     // 1. ตรวจสอบข้อมูลนักศึกษา (Students)
-    const studentCount = await Student.countDocuments();
-    if (studentCount === 0) {
-      const mockStudentsPath = path.resolve(__dirname, '../../../mockup-data/mock_students.json');
-      if (fs.existsSync(mockStudentsPath)) {
-        const raw = fs.readFileSync(mockStudentsPath, 'utf-8');
-        const studentsData = JSON.parse(raw);
-        await Student.insertMany(studentsData);
-        console.log(`🌱 [Seed] บันทึกข้อมูลนักศึกษาเริ่มต้น ${studentsData.length} รายการลง MongoDB สำเร็จ`);
+    const mockStudentsPath = path.resolve(__dirname, '../../../mockup-data/mock_students.json');
+    if (fs.existsSync(mockStudentsPath)) {
+      const raw = fs.readFileSync(mockStudentsPath, 'utf-8');
+      const studentsData = JSON.parse(raw);
+      for (const s of studentsData) {
+        await Student.updateOne(
+          { student_id: s.student_id },
+          { $set: s },
+          { upsert: true }
+        );
       }
+      console.log(`🌱 [Seed] ตรวจสอบ/ซิงค์ข้อมูลนักศึกษา ${studentsData.length} รายการลง MongoDB สำเร็จ`);
     }
 
     // 2. ตรวจสอบข้อมูลพัสดุ (Packages)
